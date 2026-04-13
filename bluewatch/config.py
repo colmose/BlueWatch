@@ -5,10 +5,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import math
+
 import yaml
 from shapely.geometry import shape
-from shapely.ops import transform
-import pyproj
 
 CONFIG_PATH = Path(__file__).parent.parent / "config" / "zones.yaml"
 MIN_ZONE_AREA_KM2 = 1.0
@@ -28,16 +28,17 @@ class Zone:
 
 
 def _area_km2(geom) -> float:
-    """Return the area of a shapely geometry in km²."""
-    wgs84 = pyproj.CRS("EPSG:4326")
-    # Use an equal-area projection centred on the geometry centroid
-    lon, lat = geom.centroid.x, geom.centroid.y
-    laea = pyproj.CRS(
-        proj="laea", lat_0=lat, lon_0=lon, datum="WGS84", units="m"
-    )
-    project = pyproj.Transformer.from_crs(wgs84, laea, always_xy=True).transform
-    projected = transform(project, geom)
-    return projected.area / 1e6
+    """Return the approximate area of a WGS-84 geometry in km².
+
+    Uses the spherical approximation: scale degrees² by (111.32 km/°)²
+    and cos(lat) for longitude compression. Accurate to ~1% for small
+    polygons at mid-latitudes — sufficient for the 1 km² threshold check.
+    """
+    lat_rad = math.radians(geom.centroid.y)
+    km_per_deg_lat = 111.32
+    km_per_deg_lon = 111.32 * math.cos(lat_rad)
+    # geom.area is in degrees²
+    return geom.area * km_per_deg_lat * km_per_deg_lon
 
 
 def load_zones(config_path: Path = CONFIG_PATH) -> list[Zone]:

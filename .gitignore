@@ -1,3 +1,4 @@
+venv/
 .env
 logs/
 data/alert_log.db
