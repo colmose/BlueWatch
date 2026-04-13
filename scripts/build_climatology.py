@@ -4,7 +4,7 @@ Build the per-pixel weekly climatological Chl-a baseline for the west coast of I
 
 Downloads CMEMS L3 MY reprocessed Chl-a product (2016–2024) for the west coast of
 Ireland bounding box, applies quality filtering (CHL_flags == 1), groups by ISO
-calendar week, and saves the per-pixel mean as a NetCDF file with week slices 1–53.
+calendar week, and saves the per-pixel mean as a NetCDF file.
 
 Output: data/climatology/wci_chl_climatology_wk.nc
   Dimensions: (week, lat, lon)
@@ -46,7 +46,8 @@ OUTPUT_PATH = (
     Path(__file__).parent.parent / "data" / "climatology" / "wci_chl_climatology_wk.nc"
 )
 
-N_WEEKS = 53  # ISO calendar weeks can legitimately include week 53
+DEFAULT_N_WEEKS = 52
+MAX_ISO_WEEK = 53
 
 
 # ---------------------------------------------------------------------------
@@ -59,27 +60,36 @@ def apply_quality_mask(ds: xr.Dataset) -> xr.DataArray:
     return ds["CHL"].where(ds["CHL_flags"] == 1)
 
 
-def compute_weekly_climatology(chl: xr.DataArray, n_weeks: int = N_WEEKS) -> xr.DataArray:
+def compute_weekly_climatology(
+    chl: xr.DataArray,
+    n_weeks: int | None = None,
+) -> xr.DataArray:
     """Compute per-pixel climatological mean Chl-a grouped by ISO calendar week.
 
     Args:
         chl: DataArray with dimension 'time' and CHL_flags already applied.
-        n_weeks: Number of output weeks (default 53).
+        n_weeks: Minimum number of output weeks. Defaults to 52, but expands to
+            53 automatically if the input contains ISO week 53.
 
     Returns:
         DataArray with dimension 'week' (1-indexed, length n_weeks).
     """
     # time.dt.isocalendar().week is fast: the time coordinate is not dask-backed.
     iso_weeks = chl.time.dt.isocalendar().week.values.astype(int)
+    max_observed_week = int(iso_weeks.max()) if iso_weeks.size else DEFAULT_N_WEEKS
+    effective_n_weeks = max(n_weeks or DEFAULT_N_WEEKS, max_observed_week)
 
     chl_with_week = chl.assign_coords(week=("time", iso_weeks))
 
     # groupby triggers a single pass over the data (dask-compatible)
     weekly_clim = chl_with_week.groupby("week").mean(dim="time", skipna=True)
 
-    # Ensure every week 1–n_weeks is present; fill any gap with NaN
-    all_weeks = np.arange(1, n_weeks + 1)
-    if len(weekly_clim.week) != n_weeks or not np.array_equal(weekly_clim.week.values, all_weeks):
+    # Ensure every week 1–effective_n_weeks is present; fill any gap with NaN.
+    all_weeks = np.arange(1, effective_n_weeks + 1)
+    if len(weekly_clim.week) != effective_n_weeks or not np.array_equal(
+        weekly_clim.week.values,
+        all_weeks,
+    ):
         weekly_clim = weekly_clim.reindex(week=all_weeks)
 
     return weekly_clim
@@ -139,7 +149,7 @@ def main() -> None:
             "source_dataset": DATASET_ID,
             "time_range": f"{START_DATE} to {END_DATE}",
             "quality_filter": "CHL_flags == 1 (good data only)",
-            "week_note": "Grouped by ISO calendar week; output includes week 53 when present.",
+            "week_note": "Grouped by ISO calendar week; output expands to week 53 when present.",
         }
     )
 
@@ -148,7 +158,7 @@ def main() -> None:
         "Per-pixel weekly climatological mean Chl-a for the west coast of Ireland. "
         f"Derived from {DATASET_ID}, good-quality pixels only (CHL_flags == 1). "
         f"Time range: {START_DATE} to {END_DATE}. "
-        "Grouped by ISO calendar week (1–53)."
+        "Grouped by ISO calendar week (1–52 by default, including week 53 when present)."
     )
 
     print(f"Saving to {OUTPUT_PATH} ...")

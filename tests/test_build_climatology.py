@@ -21,7 +21,7 @@ _spec.loader.exec_module(_mod)
 
 apply_quality_mask = _mod.apply_quality_mask
 compute_weekly_climatology = _mod.compute_weekly_climatology
-N_WEEKS = _mod.N_WEEKS
+DEFAULT_N_WEEKS = _mod.DEFAULT_N_WEEKS
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +99,7 @@ def test_all_bad_flags_all_nan():
 # ---------------------------------------------------------------------------
 
 
-def test_output_has_53_weeks():
+def test_output_has_52_weeks_by_default():
     # 3 days each in week 1, 10, 52
     dates = ["2018-01-01", "2018-01-02", "2018-01-03",   # week 1
              "2018-03-05", "2018-03-06", "2018-03-07",   # week 10
@@ -112,9 +112,9 @@ def test_output_has_53_weeks():
     )
     chl = apply_quality_mask(ds)
     clim = compute_weekly_climatology(chl)
-    assert clim.sizes["week"] == 53
+    assert clim.sizes["week"] == DEFAULT_N_WEEKS
     assert int(clim.week.values[0]) == 1
-    assert int(clim.week.values[-1]) == 53
+    assert int(clim.week.values[-1]) == DEFAULT_N_WEEKS
 
 
 def test_weekly_mean_values_correct():
@@ -188,7 +188,7 @@ def test_week_53_preserved_as_separate_slice():
     chl = apply_quality_mask(ds)
     clim = compute_weekly_climatology(chl)
 
-    assert clim.sizes["week"] == 53, "Output must include a dedicated week-53 slice"
+    assert clim.sizes["week"] == 53, "Output must expand to include week 53 when present"
     week52_mean = float(clim.sel(week=52).isel(lat=0, lon=0))
     week53_mean = float(clim.sel(week=53).isel(lat=0, lon=0))
     assert week52_mean == pytest.approx(2.0)
@@ -228,7 +228,7 @@ def test_main_exits_if_only_password_set(monkeypatch):
 
 
 def test_main_writes_netcdf_with_correct_structure(tmp_path, monkeypatch):
-    """main() should produce a NetCDF with dimension 'week' (53) and var 'CHL_mean'."""
+    """main() should produce a NetCDF with 52 weeks when no ISO week 53 is present."""
     monkeypatch.setenv("CMEMS_USERNAME", "test_user")
     monkeypatch.setenv("CMEMS_PASSWORD", "test_pass")
 
@@ -254,9 +254,31 @@ def test_main_writes_netcdf_with_correct_structure(tmp_path, monkeypatch):
 
     assert out_path.exists(), "Output NetCDF was not created"
     out_ds = xr.open_dataset(out_path)
-    assert out_ds.sizes["week"] == 53
-    assert int(out_ds.week.values[-1]) == 53
+    assert out_ds.sizes["week"] == DEFAULT_N_WEEKS
+    assert int(out_ds.week.values[-1]) == DEFAULT_N_WEEKS
     assert "CHL_mean" in out_ds.data_vars
+
+
+def test_main_writes_week_53_slice_when_present(tmp_path, monkeypatch):
+    """main() should preserve week 53 when the source data contains it."""
+    monkeypatch.setenv("CMEMS_USERNAME", "test_user")
+    monkeypatch.setenv("CMEMS_PASSWORD", "test_pass")
+    out_path = tmp_path / "climatology" / "wci_chl_climatology_wk.nc"
+    monkeypatch.setattr(_mod, "OUTPUT_PATH", out_path)
+
+    fake_ds = _make_dataset(
+        times=["2020-12-21", "2020-12-28"],
+        chl_values=[[[2.0, 2.0], [2.0, 2.0]], [[4.0, 4.0], [4.0, 4.0]]],
+        flag_values=[[[1, 1], [1, 1]], [[1, 1], [1, 1]]],
+    )
+
+    with patch.object(_mod.copernicusmarine, "open_dataset", return_value=fake_ds):
+        _mod.main()
+
+    out_ds = xr.open_dataset(out_path)
+    assert out_ds.sizes["week"] == 53
+    assert float(out_ds["CHL_mean"].sel(week=52).isel(lat=0, lon=0)) == pytest.approx(2.0)
+    assert float(out_ds["CHL_mean"].sel(week=53).isel(lat=0, lon=0)) == pytest.approx(4.0)
 
 
 def test_main_exits_on_empty_dataset(tmp_path, monkeypatch):
