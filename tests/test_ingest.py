@@ -9,7 +9,7 @@ import pytest
 import xarray as xr
 
 import bluewatch.ingest as ingest_mod
-from bluewatch.ingest import apply_quality_filter, fetch_latest_chl
+from bluewatch.ingest import CMEMSDownloadError, apply_quality_filter, fetch_latest_chl
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -174,6 +174,35 @@ def test_fetch_passes_correct_date_to_download(monkeypatch: pytest.MonkeyPatch) 
     assert captured["date_str"] == "2024-03-20"
 
 
+def test_fetch_without_date_falls_back_to_prior_day(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CMEMS_USERNAME", "user")
+    monkeypatch.setenv("CMEMS_PASSWORD", "pass")
+
+    attempted_dates: list[str] = []
+
+    class FrozenDate(datetime.date):
+        @classmethod
+        def today(cls) -> "FrozenDate":
+            return cls(2024, 1, 17)
+
+    def fake_download(username: str, password: str, date_str: str, out_file: Path) -> None:
+        del username, password
+        attempted_dates.append(date_str)
+        if date_str == "2024-01-16":
+            raise CMEMSDownloadError(f"ERROR: CMEMS download failed for {date_str}: unavailable")
+        _write_fake_nc(out_file, date=date_str)
+
+    monkeypatch.setattr("bluewatch.ingest.datetime.date", FrozenDate)
+    monkeypatch.setattr(ingest_mod, "_download_subset", fake_download)
+
+    result = fetch_latest_chl()
+
+    assert attempted_dates == ["2024-01-16", "2024-01-15"]
+    assert str(result["time"].values[0]) == "2024-01-15T00:00:00.000000000"
+
+
 def test_fetch_exits_when_download_fails_to_create_file(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -195,3 +224,21 @@ def test_fetch_exits_when_download_fails_to_create_file(
     with pytest.raises(SystemExit) as exc_info:
         fetch_latest_chl(date=datetime.date(2024, 1, 15))
     assert exc_info.value.code != 0
+
+
+def test_download_subset_does_not_pass_force_download(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_subset(**kwargs: object) -> None:
+        captured.update(kwargs)
+        output_path = Path(str(kwargs["output_directory"])) / str(kwargs["output_filename"])
+        _write_fake_nc(output_path, date=str(kwargs["start_datetime"]))
+
+    monkeypatch.setattr("bluewatch.ingest.copernicusmarine.subset", fake_subset)
+
+    ingest_mod._download_subset("user", "pass", "2024-01-15", tmp_path / "chl_nrt.nc")
+
+    assert "force_download" not in captured

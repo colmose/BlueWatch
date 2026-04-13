@@ -23,6 +23,7 @@ MAX_LAT = 55.5
 
 # NRT product has a ~1-2 day processing lag; download yesterday by default
 NRT_LAG_DAYS = 1
+NRT_FALLBACK_DAYS = 1
 
 
 # ---------------------------------------------------------------------------
@@ -45,7 +46,9 @@ def fetch_latest_chl(date: datetime.date | None = None) -> xr.Dataset:
     bounding box, then applies the ``CHL_flags == 1`` quality filter.
 
     Args:
-        date: Date to download. Defaults to today minus NRT_LAG_DAYS.
+        date: Date to download. Defaults to the newest published NRT slice,
+            starting with today minus NRT_LAG_DAYS and falling back one extra
+            day to cover the documented publication lag.
 
     Returns:
         xr.Dataset with ``CHL`` (quality-filtered, bad pixels → NaN) and
@@ -56,16 +59,24 @@ def fetch_latest_chl(date: datetime.date | None = None) -> xr.Dataset:
         - The download fails or the output file cannot be opened.
     """
     username, password = _require_credentials()
-    target_date = date or (datetime.date.today() - datetime.timedelta(days=NRT_LAG_DAYS))
-    date_str = target_date.isoformat()
+    target_dates = _candidate_dates(date)
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        out_file = Path(tmpdir) / "chl_nrt.nc"
-        _download_subset(username, password, date_str, out_file)
-        try:
-            ds = xr.open_dataset(out_file, engine="h5netcdf").load()
-        except Exception as exc:
-            sys.exit(f"ERROR: failed to open downloaded CHL file: {exc}")
+        errors: list[str] = []
+        for target_date in target_dates:
+            date_str = target_date.isoformat()
+            out_file = Path(tmpdir) / f"chl_nrt_{date_str}.nc"
+            try:
+                _download_subset(username, password, date_str, out_file)
+                ds = xr.open_dataset(out_file, engine="h5netcdf").load()
+            except CMEMSDownloadError as exc:
+                errors.append(str(exc))
+                continue
+            except Exception as exc:
+                sys.exit(f"ERROR: failed to open downloaded CHL file: {exc}")
+            break
+        else:
+            sys.exit("\n".join(errors))
 
     return apply_quality_filter(ds)
 
@@ -87,6 +98,22 @@ def _require_credentials() -> tuple[str, str]:
     return username, password
 
 
+def _candidate_dates(date: datetime.date | None) -> list[datetime.date]:
+    """Return explicit date or default NRT date(s) to try in order."""
+    if date is not None:
+        return [date]
+
+    latest_expected = datetime.date.today() - datetime.timedelta(days=NRT_LAG_DAYS)
+    return [
+        latest_expected - datetime.timedelta(days=offset)
+        for offset in range(NRT_FALLBACK_DAYS + 1)
+    ]
+
+
+class CMEMSDownloadError(RuntimeError):
+    """Raised when a CMEMS subset download cannot provide the requested file."""
+
+
 def _download_subset(username: str, password: str, date_str: str, out_file: Path) -> None:
     """Download a single-day CHL subset to out_file via copernicusmarine.subset()."""
     try:
@@ -103,12 +130,11 @@ def _download_subset(username: str, password: str, date_str: str, out_file: Path
             output_directory=str(out_file.parent),
             username=username,
             password=password,
-            force_download=True,
         )
     except Exception as exc:
-        sys.exit(f"ERROR: CMEMS download failed for {date_str}: {exc}")
+        raise CMEMSDownloadError(f"ERROR: CMEMS download failed for {date_str}: {exc}") from exc
     if not out_file.exists():
-        sys.exit(
+        raise CMEMSDownloadError(
             f"ERROR: copernicusmarine.subset() did not create expected output file "
             f"{out_file} — check CMEMS product availability for {date_str}."
         )
