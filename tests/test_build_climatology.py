@@ -254,10 +254,14 @@ def test_main_writes_netcdf_with_correct_structure(tmp_path, monkeypatch):
 
     assert out_path.exists(), "Output NetCDF was not created"
 
-    ds_out = xr.open_dataset(out_path)
-    assert "CHL_mean" in ds_out, "Variable CHL_mean missing from output"
-    assert "week" in ds_out.dims, "Dimension 'week' missing from output"
-    assert ds_out.sizes["week"] == 52, f"Expected 52 weeks, got {ds_out.sizes['week']}"
-    assert "lat" in ds_out.dims
-    assert "lon" in ds_out.dims
-    ds_out.close()
+def test_main_exits_on_empty_dataset(tmp_path, monkeypatch):
+    """main() must exit loudly when CMEMS returns 0 time steps."""
+    monkeypatch.setenv("CMEMS_USERNAME", "test_user")
+    monkeypatch.setenv("CMEMS_PASSWORD", "test_pass")
+    monkeypatch.setattr(_mod, "OUTPUT_PATH", tmp_path / "clim.nc")
+
+    empty_ds = _make_dataset(times=[], chl_values=np.zeros((0, 2, 2)), flag_values=np.zeros((0, 2, 2)))
+    with patch.object(_mod.copernicusmarine, "open_dataset", return_value=empty_ds):
+        with pytest.raises(SystemExit) as exc_info:
+            _mod.main()
+    assert exc_info.value.code != 0

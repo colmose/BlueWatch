@@ -12,12 +12,12 @@ Output: data/climatology/wci_chl_climatology_wk.nc
 
 Run once offline before starting the daily pipeline:
   CMEMS_USERNAME=xxx CMEMS_PASSWORD=yyy python scripts/build_climatology.py
+"""
 
 # TODO: experiment with a rolling 30-day window climatology in a later iteration
 # to assess whether it reduces week-boundary artefacts near ISO week transitions
 # (e.g., late December / early January). Compare false-positive rates against the
 # ISO-week baseline over the same 14-day pilot window before switching.
-"""
 
 import os
 import sys
@@ -123,7 +123,14 @@ def main() -> None:
     )
 
     print(f"Dataset opened.   Dimensions: {dict(ds.sizes)}")
-    print(f"  Time steps:     {ds.sizes['time']} days")
+    n_steps = ds.sizes["time"]
+    print(f"  Time steps:     {n_steps} days")
+    if n_steps == 0:
+        sys.exit(
+            f"ERROR: CMEMS returned 0 time steps for {DATASET_ID} "
+            f"over {START_DATE} to {END_DATE}. "
+            "Check product availability and date range."
+        )
 
     chl_masked = apply_quality_mask(ds)
     weekly_clim = compute_weekly_climatology(chl_masked)
