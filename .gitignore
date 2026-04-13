@@ -1,0 +1,7 @@
+.env
+logs/
+data/alert_log.db
+data/climatology/*.nc
+__pycache__/
+*.pyc
+.DS_Store
