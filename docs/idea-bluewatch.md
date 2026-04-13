@@ -15,11 +15,11 @@ Harmful algal blooms are increasing in frequency, duration, and geographic range
 
 The core data problem is solved. Copernicus Marine Service delivers daily L3 chlorophyll-a products from Sentinel-3 OLCI at 300m resolution, free globally, updated within 3 hours of acquisition. The anomaly calculation — current Chl-a versus the climatological mean for that pixel and calendar week — is standard oceanographic practice. The scientific methodology is well-established in the peer-reviewed literature.
 
-What does not exist is a non-technical interface that wraps this data into configurable threshold alerts for the operators who need it most. HABreports.org (SAMS) is the closest existing tool — a working early warning system for Scottish waters combining satellite and modelling data. It is grant-funded, covers only Scottish waters, requires expert interpretation by SAMS scientists, and is not a scalable product. It is a bespoke service for one country's industry.
+What does not appear to exist as a lightweight commercial product is a non-technical interface that wraps this data into configurable threshold alerts for the operators who need it most. That claim needs to be stated carefully. HABreports.org (SAMS) is not the only precedent: ASIMUTH (an EU FP7 project coordinated from Ireland, 2010-2013) built an Atlantic-European HAB forecasting system with a web portal, SMS alerts, and a smartphone app, and later public-sector work such as PRIMROSE extended Atlantic-coast forecasting portals and bulletins. Ireland also still has a currently operational Marine Institute weekly HAB bulletin. The market gap is therefore narrower than "nobody built this"; it is that these systems are institutional, region-specific, expert-curated, bulletin-based, or grant-supported rather than a simple self-serve product.
 
 The global aquaculture market is valued at $310 billion (2024), growing at ~5% CAGR. Scotland alone generates £468 million GVA from aquaculture. Norway, Chile, Australia, New Zealand, Canada, Ireland, and Japan collectively represent a large, motivated commercial operator base with real economic exposure to HAB events. None of them have access to a configurable, satellite-based threshold alert system they can point at their own farm sites.
 
-**The policy window is unusually open.** The 2025 SA bloom generated emergency government spending and a new national research office. HABreports.org's Scottish model — government and industry co-funded at national scale — demonstrates institutional willingness to pay. The absence of a commercial equivalent is not evidence of lack of demand; it is evidence of no one having built it.
+**The policy window is unusually open.** The 2025 SA bloom generated emergency government spending and a new national research office. ASIMUTH, HABreports.org, and PRIMROSE demonstrate that governments, research institutes, and industry already fund early-warning systems when the operational pain is real. The absence of a scaled commercial equivalent is therefore not evidence of lack of demand; it is evidence that the operational model has so far lived mainly inside public-sector and grant-funded delivery.
 
 ---
 
@@ -115,7 +115,8 @@ Copernicus User Uptake programme funds downstream applications of Copernicus dat
 
 | Tool / Service | Coverage | Type | Core Weakness |
 |---|---|---|---|
-| HABreports.org (SAMS) | Scotland only | Government/industry funded | Not scalable; expert-dependent; Scotland-specific; not a product |
+| ASIMUTH / PRIMROSE / Marine Institute HAB bulletins | Atlantic Europe / Ireland | Public-sector and grant-funded forecasting services | Strong precedent, with the Irish weekly bulletin currently operational, but still region-specific, expert-curated, and not a lightweight self-serve SaaS |
+| HABreports.org (SAMS) | Scotland only | Government/industry funded | Strong regional service, but expert-dependent and not a lightweight product |
 | CMEMS Ocean Colour Portal | Global | Free data portal | Technical interface; no alerts; NetCDF download only |
 | NOAA HAB Forecast Bulletins | US coastal | Weekly PDF bulletins (free) | Weekly cadence; US only; not configurable |
 | CalHABMAP | California | State government map | State-specific; map only; no push alerts |
@@ -126,13 +127,13 @@ Copernicus User Uptake programme funds downstream applications of Copernicus dat
 | SARDI monitoring website | South Australia | Government portal | Created ad hoc during 2025 crisis; no ongoing operational model |
 | iNaturalist HAB observations | Global | Citizen science | Reactive community observation; not satellite-based |
 
-**The honest competitive position:** HABreports.org is the most direct predecessor and demonstrates that the demand is real, the science works, and the aquaculture sector will engage. Its weakness is that it is a manually operated, government-funded regional service — not a scalable, self-serve global product. BlueWatch is the product version of what HABreports.org proved is needed.
+**The honest competitive position:** BlueWatch is not entering a vacuum. ASIMUTH, HABreports.org, and PRIMROSE already demonstrated that the demand is real, the science can be operationalised, and aquaculture users will engage with forecast products. The sharper question is whether there is room for a narrower, productised layer that strips out the hydrodynamic forecasting stack and expert curation, then wins on simplicity, configurability, and speed of deployment.
 
 ---
 
 ## Key Differentiators
 
-1. **Configurable thresholds for user-defined zones** — No existing tool lets a farm manager draw their actual site on a map and receive an alert when Chl-a exceeds their chosen threshold. This is the core v1 feature and it does not exist anywhere in the market today.
+1. **Configurable thresholds for user-defined zones** — The strongest product claim is not "nobody has done alerts", but that existing institutional systems do not appear to be packaged as a lightweight self-serve product where a farm manager defines their site and manages simple threshold logic themselves.
 
 2. **Prospective, not reactive** — Every existing citizen science tool requires someone to see a bloom before reporting it. BlueWatch alerts 24–72 hours before surface bloom formation becomes visually apparent, using satellite precursor signals. That lead time is the economic value: it allows a shellfish operator to delay harvest rather than discover toxin contamination in product already bagged.
 
@@ -140,7 +141,7 @@ Copernicus User Uptake programme funds downstream applications of Copernicus dat
 
 4. **Marine science domain expertise baked into the alert text** — The distinction between a nuisance false positive (spring diatom bloom) and a genuine HAB precursor signal involves SST, thermal stratification, wind-driven upwelling patterns, and regional species ecology. This is not in the satellite data — it has to be built into the alert framing. A generic development team cannot replicate this without the background.
 
-5. **Global from day one** — CMEMS data is global. HABreports.org solved the problem for one country's industry; there is no structural reason this can't be a global product from day one, with regional expansion of contextual layers over time.
+5. **Globalizable data foundation** — CMEMS data is global, but ASIMUTH and its successors are evidence that operational usefulness is regionally specific. The data layer may be global from day one; the trustworthy product layer is more likely to expand region by region as thresholds, masking rules, and context are calibrated.
 
 ---
 
@@ -154,7 +155,7 @@ Copernicus User Uptake programme funds downstream applications of Copernicus dat
 
 **Sentinel-3 product continuity.** The current system relies on Sentinel-3A and 3B OLCI. ESA plans Sentinel-3C but there are operational continuity gaps. MODIS-Aqua and VIIRS (NASA) provide fallback Chl-a products, also free. A multi-sensor approach reduces this risk but increases processing complexity.
 
-**HABreports.org incumbency expansion risk.** SAMS could, with additional grant funding, expand HABreports.org to cover more geographies. The mitigation is speed of international deployment and the B2B freemium model — a grant-funded institutional service cannot iterate on pricing and UX the way a product can.
+**Institutional incumbency risk.** SAMS is not the only incumbent. Ireland and Atlantic Europe already have a history of public-sector HAB forecasting work through ASIMUTH, Marine Institute bulletins, and PRIMROSE, and the Marine Institute weekly Irish HAB bulletin is currently live. The mitigation is not to pretend these do not exist, but to differentiate on product packaging, lower operating complexity, and easier adoption for specific user-defined zones.
 
 **Regulatory complexity.** In most jurisdictions, shellfish harvest closure decisions are made by government food safety agencies (FSA in the UK, FDA/NOAA in the US) based on toxin testing in flesh — not satellite Chl-a anomalies. BlueWatch is a precautionary signal tool, not a regulatory trigger. This must be explicit in all user communications. Get legal advice on disclaimer language before any beta launch.
 
@@ -166,13 +167,14 @@ Copernicus User Uptake programme funds downstream applications of Copernicus dat
 
 ## Revenue Benchmark
 
-HABreports.org's funding model — Scottish Government plus Seafood Shetland industry contributions across multiple EU and UK grants since the ASIMUTH project — demonstrates that the aquaculture sector will fund early warning systems when they exist and work. The 2025 SA bloom created a new national research office and A$102.5 million in emergency spending. At modest scale, 500 professional site subscriptions at £240/year = £120,000 ARR with minimal infrastructure cost and a market that has demonstrated strong economic motivation to pay for the thing being built.
+ASIMUTH's funding history, follow-on regional services, and HABreports.org's support model demonstrate that the aquaculture sector and public bodies will fund early warning systems when they exist and work. The 2025 SA bloom created a new national research office and A$102.5 million in emergency spending. At modest scale, 500 professional site subscriptions at £240/year = £120,000 ARR with minimal infrastructure cost, but the realistic positioning is likely to be alongside public monitoring programmes rather than in ignorance of them.
 
 ---
 
 ## Next Steps (When Ready to Explore)
 
-- [ ] Contact SAMS to understand HABreports.org's architecture, data pipeline, and whether partnership or licensing is viable vs. building independently
+- [ ] Contact SAMS and the Marine Institute to understand current HABreports / PRIMROSE / bulletin workflows, what remains operational, and whether partnership or licensing is viable versus building independently
+- [ ] Pull the ASIMUTH business-plan and user-research material into the market model; treat it as prior customer discovery rather than starting from zero
 - [ ] Audit CMEMS L3 NRT ocean colour API: query latency, polygon support, rate limits, authentication for production use
 - [ ] Build proof-of-concept anomaly alert for one specific coastal polygon (e.g. Shetland or a SA/Tasmanian salmon zone) using historical CMEMS data — validate that the anomaly signal precedes known bloom events by 24–72 hours in the archive
 - [ ] Identify 5–10 aquaculture operators for initial discovery interviews: what monitoring do they currently do? What would a 48-hour advance alert be worth? Would they pay monthly?

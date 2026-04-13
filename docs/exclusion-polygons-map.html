@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BlueWatch Exclusion Polygons</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    crossorigin=""
+  >
+  <style>
+    :root {
+      --bg: #f4efe7;
+      --panel: rgba(255, 251, 245, 0.96);
+      --ink: #17212b;
+      --muted: #586571;
+      --line: rgba(23, 33, 43, 0.12);
+      --accent: #0a6c74;
+      --accent-2: #b44627;
+      --map-sea: #c8dde8;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(10, 108, 116, 0.12), transparent 32%),
+        linear-gradient(180deg, #f8f4ee 0%, var(--bg) 100%);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .panel {
+      padding: 32px 24px;
+      background: var(--panel);
+      border-right: 1px solid var(--line);
+      backdrop-filter: blur(10px);
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(2rem, 3vw, 2.8rem);
+      line-height: 1.02;
+    }
+
+    .intro {
+      margin: 0 0 20px;
+      line-height: 1.5;
+      color: var(--muted);
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 14px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      color: #fff;
+      background: var(--ink);
+    }
+
+    button.secondary {
+      color: var(--ink);
+      background: transparent;
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+
+    .legend {
+      display: grid;
+      gap: 12px;
+    }
+
+    .legend-section-title {
+      margin: 20px 0 10px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    .legend-item {
+      padding: 14px 14px 12px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.74);
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+
+    .swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      display: inline-block;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    .legend-item strong {
+      font-size: 0.98rem;
+    }
+
+    .legend-item p {
+      margin: 8px 0 0;
+      line-height: 1.45;
+      color: var(--muted);
+      font-size: 0.93rem;
+    }
+
+    .note {
+      margin-top: 20px;
+      font-size: 0.9rem;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .stat {
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.74);
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+
+    .stat strong,
+    .stat span {
+      display: block;
+    }
+
+    .stat strong {
+      font-size: 1.1rem;
+      margin-bottom: 4px;
+    }
+
+    .stat span {
+      font-size: 0.88rem;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+
+    #map {
+      min-height: 100vh;
+      width: 100%;
+      background: var(--map-sea);
+    }
+
+    .leaflet-container {
+      font: inherit;
+    }
+
+    .leaflet-popup-content {
+      margin: 12px 14px;
+      line-height: 1.45;
+    }
+
+    .popup-title {
+      margin: 0 0 6px;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    @media (max-width: 900px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .panel {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      #map {
+        min-height: 60vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="layout">
+    <section class="panel">
+      <p class="eyebrow">BlueWatch</p>
+      <h1>Exclusion Polygons</h1>
+      <p class="intro">
+        Four conservative west-coast Ireland exclusion polygons from
+        <code>data/masks/wci_turbid_mask.geojson</code>, shown against a global basemap.
+      </p>
+
+      <div class="controls">
+        <button id="world-view" type="button">World View</button>
+        <button id="focus-view" class="secondary" type="button">Zoom To Polygons</button>
+        <button id="farms-view" class="secondary" type="button">Zoom To Farms</button>
+      </div>
+
+      <p class="legend-section-title">Exclusion Polygons</p>
+      <div id="legend" class="legend"></div>
+
+      <p class="legend-section-title">Aquaculture Snapshot</p>
+      <div id="aquaculture-legend" class="legend"></div>
+      <div id="aquaculture-stats" class="stats"></div>
+
+      <p class="note">
+        Farm markers are a static snapshot for west-coast counties taken on
+        <strong>2026-04-13</strong> from the Department of Agriculture, Food and the Marine /
+        Marine Institute aquaculture sites layer. This page can be opened from disk without a
+        local web server. The map tiles and Leaflet assets still require an internet connection.
+      </p>
+    </section>
+
+    <div id="map" aria-label="Map showing exclusion polygons"></div>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="./west-coast-aquaculture-snapshot.js"></script>
+  <script>
+    const colors = ["#b44627", "#0a6c74", "#6c4ea0", "#157f54"];
+    const aquacultureTypeColors = {
+      Finfish: "#c55a11",
+      Shellfish: "#1d6fa5",
+      "Aquatic Plant": "#2d8f5b",
+      Echinoderm: "#9d7b1f",
+      Mixed: "#7348a8",
+      Unknown: "#5f6871"
+    };
+
+    const geojson = {
+      "type": "FeatureCollection",
+      "name": "wci_turbid_mask",
+      "features": [
+        {
+          "type": "Feature",
+          "properties": {
+            "name": "Shannon Estuary",
+            "reason": "High-turbidity estuarine waters; conservative v1 exclusion."
+          },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [[[-9.95, 52.79], [-9.52, 52.79], [-9.32, 52.65], [-9.22, 52.51], [-9.28, 52.39], [-9.52, 52.31], [-9.82, 52.35], [-10.02, 52.50], [-9.95, 52.79]]]
+          }
+        },
+        {
+          "type": "Feature",
+          "properties": {
+            "name": "Inner Galway Bay",
+            "reason": "Sheltered inner-bay waters with stronger CDOM and suspended sediment risk."
+          },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [[[-9.32, 53.34], [-8.98, 53.34], [-8.78, 53.26], [-8.70, 53.14], [-8.82, 53.06], [-9.10, 53.04], [-9.34, 53.12], [-9.40, 53.24], [-9.32, 53.34]]]
+          }
+        },
+        {
+          "type": "Feature",
+          "properties": {
+            "name": "Clew Bay Narrows",
+            "reason": "Complex inner-bay geometry and narrow channels; exclude for v1 signal quality."
+          },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [[[-9.98, 53.84], [-9.60, 53.84], [-9.40, 53.76], [-9.36, 53.66], [-9.52, 53.58], [-9.82, 53.58], [-10.04, 53.68], [-9.98, 53.84]]]
+          }
+        },
+        {
+          "type": "Feature",
+          "properties": {
+            "name": "Bantry Bay Inner Reaches",
+            "reason": "Sheltered fjard-like inner bay where turbidity-driven false positives are more likely."
+          },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [[[-9.78, 51.78], [-9.28, 51.78], [-9.08, 51.70], [-9.04, 51.58], [-9.22, 51.50], [-9.54, 51.50], [-9.80, 51.60], [-9.78, 51.78]]]
+          }
+        }
+      ]
+    };
+
+    const legend = document.getElementById("legend");
+    const aquacultureLegend = document.getElementById("aquaculture-legend");
+    const aquacultureStats = document.getElementById("aquaculture-stats");
+    const worldButton = document.getElementById("world-view");
+    const focusButton = document.getElementById("focus-view");
+    const farmsButton = document.getElementById("farms-view");
+    const aquacultureSnapshot = window.WEST_COAST_AQUACULTURE_SNAPSHOT;
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function classifyAquacultureType(value) {
+      if (!value) return "Unknown";
+      if (value === "Finfish") return "Finfish";
+      if (value === "Shellfish") return "Shellfish";
+      if (value === "Aquatic Plant") return "Aquatic Plant";
+      if (value === "Echinoderm") return "Echinoderm";
+      if (value.includes(",")) return "Mixed";
+      return "Unknown";
+    }
+
+    geojson.features.forEach((feature, index) => {
+      const item = document.createElement("article");
+      item.className = "legend-item";
+      item.innerHTML = `
+        <strong><span class="swatch" style="background:${colors[index]}"></span>${feature.properties.name}</strong>
+        <p>${feature.properties.reason}</p>
+      `;
+      legend.appendChild(item);
+    });
+
+    const aquacultureCounts = aquacultureSnapshot.features.reduce((accumulator, feature) => {
+      const category = classifyAquacultureType(feature.properties.aquaculture_type);
+      accumulator[category] = (accumulator[category] || 0) + 1;
+      return accumulator;
+    }, {});
+
+    [
+      ["Shellfish", "Mostly oyster and mussel sites"],
+      ["Finfish", "Mostly salmon sites"],
+      ["Aquatic Plant", "Seaweed licences"],
+      ["Mixed", "Multi-species licences"]
+    ].forEach(([category, description]) => {
+      if (!aquacultureCounts[category]) {
+        return;
+      }
+      const item = document.createElement("article");
+      item.className = "legend-item";
+      item.innerHTML = `
+        <strong><span class="swatch" style="background:${aquacultureTypeColors[category]}"></span>${category}</strong>
+        <p>${description}</p>
+      `;
+      aquacultureLegend.appendChild(item);
+    });
+
+    [
+      [`${aquacultureSnapshot.features.length}`, "west-coast sites in this snapshot"],
+      [`${aquacultureCounts.Shellfish || 0}`, "shellfish licences"],
+      [`${aquacultureCounts.Finfish || 0}`, "finfish licences"],
+      ["8", "counties included in the west-coast filter"]
+    ].forEach(([value, label]) => {
+      const item = document.createElement("article");
+      item.className = "stat";
+      item.innerHTML = `<strong>${value}</strong><span>${label}</span>`;
+      aquacultureStats.appendChild(item);
+    });
+
+    const map = L.map("map", {
+      worldCopyJump: true,
+      zoomControl: true
+    }).setView([53.4, -9.6], 7);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18,
+      attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(map);
+
+    const polygonLayer = L.geoJSON(geojson, {
+      style: (feature) => {
+        const index = geojson.features.findIndex((candidate) => candidate === feature);
+        return {
+          color: colors[index],
+          weight: 2,
+          fillColor: colors[index],
+          fillOpacity: 0.35
+        };
+      },
+      onEachFeature: (feature, layer) => {
+        layer.bindPopup(`
+          <div class="popup-title">${feature.properties.name}</div>
+          <div>${feature.properties.reason}</div>
+        `);
+      }
+    }).addTo(map);
+
+    const aquacultureLayer = L.geoJSON(aquacultureSnapshot, {
+      pointToLayer: (feature, latlng) => {
+        const category = classifyAquacultureType(feature.properties.aquaculture_type);
+        return L.circleMarker(latlng, {
+          radius: 4.5,
+          color: "#ffffff",
+          weight: 1.2,
+          fillColor: aquacultureTypeColors[category] || aquacultureTypeColors.Unknown,
+          fillOpacity: 0.9
+        });
+      },
+      onEachFeature: (feature, layer) => {
+        const properties = feature.properties;
+        layer.bindPopup(`
+          <div class="popup-title">${escapeHtml(properties.site_id || "Unknown site")}</div>
+          <div><strong>Type:</strong> ${escapeHtml(properties.aquaculture_type || "Unknown")}</div>
+          <div><strong>Species:</strong> ${escapeHtml(properties.species_concat || "Not listed")}</div>
+          <div><strong>County:</strong> ${escapeHtml(properties.county || "Unknown")}</div>
+          <div><strong>Bay/Harbour:</strong> ${escapeHtml(properties.harbour || properties.bay || "Not listed")}</div>
+          <div><strong>Operator:</strong> ${escapeHtml(properties.licensee_name || "Not listed")}</div>
+          <div><strong>Status:</strong> ${escapeHtml(properties.site_status || "Unknown")}</div>
+        `);
+      }
+    }).addTo(map);
+
+    function showWorldView() {
+      map.setView([20, 0], 2, { animate: true });
+    }
+
+    function showFocusedView() {
+      map.fitBounds(polygonLayer.getBounds().pad(1.8), {
+        animate: true,
+        maxZoom: 7
+      });
+    }
+
+    function showAquacultureView() {
+      map.fitBounds(aquacultureLayer.getBounds().pad(0.15), {
+        animate: true,
+        maxZoom: 9
+      });
+    }
+
+    worldButton.addEventListener("click", showWorldView);
+    focusButton.addEventListener("click", showFocusedView);
+    farmsButton.addEventListener("click", showAquacultureView);
+  </script>
+</body>
+</html>

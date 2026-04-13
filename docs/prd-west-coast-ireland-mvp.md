@@ -7,16 +7,24 @@
 
 ## 1. Overview
 
-BlueWatch West Coast Ireland MVP is a minimal server-side pipeline and alert system that monitors chlorophyll-a anomalies along the west coast of Ireland using free Copernicus Marine Service (CMEMS) satellite data. It ingests daily L3 near-real-time Chl-a data, computes anomaly ratios against a climatological baseline, and sends email alerts when configured zones exceed a threshold. This is a focused proof-of-concept targeting the Atlantic-facing aquaculture coastline from Donegal Bay to Bantry Bay — one of the cleaner, lower-turbidity candidate geographies identified in the idea document — before any broader product build.
+BlueWatch West Coast Ireland MVP is a minimal server-side pipeline and alert system that monitors chlorophyll-a anomalies along the west coast of Ireland using free Copernicus Marine Service (CMEMS) satellite data. It ingests daily L3 near-real-time Chl-a data, computes anomaly ratios against a climatological baseline, and sends email alerts when configured zones exceed a threshold. This is a focused proof-of-concept targeting the Atlantic-facing aquaculture coastline from Donegal Bay to Bantry Bay — one of the cleaner, lower-turbidity candidate geographies identified in the idea document — before any broader product build. The market thesis is deliberately narrower than "no HAB alerting systems exist": Atlantic-European forecasting services have existed in institutional form, but BlueWatch is testing whether a simpler, lower-overhead, zone-configurable product can be useful in Ireland without the full expert-curated modelling stack.
 
 ---
 
 ## 2. Problem Statement
 
-1. Aquaculture operators on Ireland's west coast (mussels, oysters in Clew Bay, Killary Harbour, Bantry Bay, Carlingford Lough) have no automated, satellite-based early warning for elevated phytoplankton concentrations near their sites.
-2. The closest existing tool (HABreports.org/SAMS) covers Scotland only and is not a self-serve product.
-3. CMEMS publishes daily Chl-a data for Irish coastal waters but there is no tooling wrapping it into actionable alerts for non-technical operators.
+1. Aquaculture operators on Ireland's west coast (mussels, oysters in Clew Bay, Killary Harbour, Bantry Bay, Carlingford Lough) do not appear to have access to a lightweight, self-serve alert product for user-defined monitoring zones, despite the existence of institutional HAB forecasting and bulletin services in Atlantic Europe.
+2. Existing precedents such as ASIMUTH (2010-2013), HABreports/SAMS, and the Marine Institute / PRIMROSE forecasting work demonstrate that early warning demand is real, but those systems depend on regional modelling, expert interpretation, or public-service delivery rather than a simple product workflow.
+3. CMEMS publishes daily Chl-a data for Irish coastal waters but there is no obvious lightweight product wrapping it into straightforward anomaly alerts for Irish operators using preset zones and simple delivery channels such as email.
 4. Without a working pipeline against a real geography, the core feasibility assumptions (anomaly signal precedes known bloom events by 24–72 hours, false positive rate is manageable in open Atlantic waters) remain unvalidated.
+
+### 2.1 Market Context Note
+
+- ASIMUTH was an EU FP7 project coordinated from Ireland that ran from 1 December 2010 to 30 November 2013. CORDIS describes it as having developed short-term HAB alert systems for Atlantic Europe using satellite data, modelling, a web portal, SMS alerts, and a smartphone app.
+- CORDIS also reports that ASIMUTH surveyed aquaculture users, found 2-7 days of warning materially useful, and developed a business plan for a financially self-sustaining service.
+- The Marine Institute later described the PRIMROSE web portal in 2021 as providing Atlantic-coast early warning for shellfish producers and authorities, alongside weekly HAB bulletins in Ireland.
+- The Marine Institute's weekly Irish HAB bulletin is currently operational. On 13 April 2026, the bulletin page listed `2026 Week 15 Irish HAB Bulletin`.
+- Therefore the correct framing for BlueWatch is not "first HAB early warning in Ireland" but "potentially a simpler, self-serve anomaly-alert product for Irish zones, with a narrower technical scope than expert-curated forecast systems."
 
 ---
 
@@ -257,6 +265,14 @@ BlueWatch/
 *All current questions resolved. See below.*
 
 ### Resolved
+
+- Market framing corrected: prior Irish / Atlantic-European HAB forecasting work exists and should be treated as precedent, not ignored.
+- Differentiation clarified: the MVP competes on simplicity, zone configurability, and lower operational complexity rather than claiming no predecessor systems exist.
+
+### Open
+
+- Is the product advantage strong enough if institutional Irish or Atlantic-European bulletins already satisfy the highest-value users?
+- Should BlueWatch be positioned primarily as a complementary operational layer on top of the currently operational Marine Institute bulletin and other public monitoring systems rather than as a replacement?
 
 | # | Question | Decision |
 |---|---|---|
