@@ -1,11 +1,10 @@
 """Zone config loader and validator (FR-12, FR-13, FR-14)."""
 
+import math
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
-import math
 
 import yaml
 from shapely.geometry import shape
@@ -27,7 +26,7 @@ class Zone:
     alert_email: str
 
 
-def _area_km2(geom) -> float:
+def _area_km2(geom: Any) -> float:
     """Return the approximate area of a WGS-84 geometry in km².
 
     Uses the spherical approximation: scale degrees² by (111.32 km/°)²
@@ -38,7 +37,7 @@ def _area_km2(geom) -> float:
     km_per_deg_lat = 111.32
     km_per_deg_lon = 111.32 * math.cos(lat_rad)
     # geom.area is in degrees²
-    return geom.area * km_per_deg_lat * km_per_deg_lon
+    return float(geom.area) * km_per_deg_lat * km_per_deg_lon
 
 
 def load_zones(config_path: Path = CONFIG_PATH) -> list[Zone]:
@@ -66,12 +65,12 @@ def load_zones(config_path: Path = CONFIG_PATH) -> list[Zone]:
     zones: list[Zone] = []
     for i, entry in enumerate(entries, start=1):
         _validate_zone(entry, index=i, config_path=config_path)
-        zones.append(_build_zone(entry, index=i))
+        zones.append(_build_zone(entry))
 
     return zones
 
 
-def _validate_zone(entry: dict, *, index: int, config_path: Path) -> None:
+def _validate_zone(entry: dict[str, Any], *, index: int, config_path: Path) -> None:
     tag = f"zones[{index}]"
 
     missing = REQUIRED_FIELDS - set(entry.keys())
@@ -106,7 +105,7 @@ def _validate_zone(entry: dict, *, index: int, config_path: Path) -> None:
         )
 
 
-def _build_zone(entry: dict, *, index: int) -> Zone:
+def _build_zone(entry: dict[str, Any]) -> Zone:
     return Zone(
         name=entry["name"],
         description=entry["description"],

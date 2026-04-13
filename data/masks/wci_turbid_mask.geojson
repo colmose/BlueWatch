@@ -1,0 +1,96 @@
+{
+  "type": "FeatureCollection",
+  "name": "wci_turbid_mask",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Shannon Estuary",
+        "reason": "High-turbidity estuarine waters; conservative v1 exclusion."
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-9.95, 52.79],
+            [-9.52, 52.79],
+            [-9.32, 52.65],
+            [-9.22, 52.51],
+            [-9.28, 52.39],
+            [-9.52, 52.31],
+            [-9.82, 52.35],
+            [-10.02, 52.50],
+            [-9.95, 52.79]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Inner Galway Bay",
+        "reason": "Sheltered inner-bay waters with stronger CDOM and suspended sediment risk."
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-9.32, 53.34],
+            [-8.98, 53.34],
+            [-8.78, 53.26],
+            [-8.70, 53.14],
+            [-8.82, 53.06],
+            [-9.10, 53.04],
+            [-9.34, 53.12],
+            [-9.40, 53.24],
+            [-9.32, 53.34]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Clew Bay Narrows",
+        "reason": "Complex inner-bay geometry and narrow channels; exclude for v1 signal quality."
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-9.98, 53.84],
+            [-9.60, 53.84],
+            [-9.40, 53.76],
+            [-9.36, 53.66],
+            [-9.52, 53.58],
+            [-9.82, 53.58],
+            [-10.04, 53.68],
+            [-9.98, 53.84]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Bantry Bay Inner Reaches",
+        "reason": "Sheltered fjard-like inner bay where turbidity-driven false positives are more likely."
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-9.78, 51.78],
+            [-9.28, 51.78],
+            [-9.08, 51.70],
+            [-9.04, 51.58],
+            [-9.22, 51.50],
+            [-9.54, 51.50],
+            [-9.80, 51.60],
+            [-9.78, 51.78]
+          ]
+        ]
+      }
+    }
+  ]
+}

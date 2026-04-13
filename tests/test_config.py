@@ -120,7 +120,10 @@ def test_ten_zones_ok():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("field", ["name", "description", "polygon", "threshold_multiplier", "alert_email"])
+@pytest.mark.parametrize(
+    "field",
+    ["name", "description", "polygon", "threshold_multiplier", "alert_email"],
+)
 def test_missing_required_field_exits(field):
     z = {k: v for k, v in VALID_ZONE.items() if k != field}
     p = write_config({"zones": [z]})
