@@ -2,6 +2,7 @@
 
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -12,7 +13,7 @@ from bluewatch.config import Zone, load_zones
 # Helpers
 # ---------------------------------------------------------------------------
 
-VALID_ZONE = {
+VALID_ZONE: dict[str, Any] = {
     "name": "Outer Clew Bay",
     "description": "Atlantic-facing mouth of Clew Bay, Co. Mayo",
     "alert_email": "ops@example.com",
@@ -26,7 +27,7 @@ VALID_ZONE = {
 }
 
 
-def write_config(data: dict) -> Path:
+def write_config(data: dict[str, Any]) -> Path:
     f = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False)
     yaml.dump(data, f)
     f.flush()
@@ -38,7 +39,7 @@ def write_config(data: dict) -> Path:
 # ---------------------------------------------------------------------------
 
 
-def test_single_valid_zone():
+def test_single_valid_zone() -> None:
     p = write_config({"zones": [VALID_ZONE]})
     zones = load_zones(p)
     assert len(zones) == 1
@@ -50,7 +51,7 @@ def test_single_valid_zone():
     assert z.polygon is not None
 
 
-def test_multiple_valid_zones():
+def test_multiple_valid_zones() -> None:
     zone2 = {**VALID_ZONE, "name": "Outer Killary", "alert_email": "killary@example.com"}
     p = write_config({"zones": [VALID_ZONE, zone2]})
     zones = load_zones(p)
@@ -58,7 +59,7 @@ def test_multiple_valid_zones():
     assert zones[1].name == "Outer Killary"
 
 
-def test_threshold_multiplier_as_int():
+def test_threshold_multiplier_as_int() -> None:
     z = {**VALID_ZONE, "threshold_multiplier": 3}
     p = write_config({"zones": [z]})
     zones = load_zones(p)
@@ -71,18 +72,18 @@ def test_threshold_multiplier_as_int():
 # ---------------------------------------------------------------------------
 
 
-def test_missing_file_exits():
+def test_missing_file_exits() -> None:
     with pytest.raises(SystemExit):
         load_zones(Path("/nonexistent/zones.yaml"))
 
 
-def test_missing_zones_key_exits():
+def test_missing_zones_key_exits() -> None:
     p = write_config({"foo": []})
     with pytest.raises(SystemExit, match="zones"):
         load_zones(p)
 
 
-def test_zones_not_a_list_exits():
+def test_zones_not_a_list_exits() -> None:
     p = write_config({"zones": "not-a-list"})
     with pytest.raises(SystemExit):
         load_zones(p)
@@ -93,19 +94,19 @@ def test_zones_not_a_list_exits():
 # ---------------------------------------------------------------------------
 
 
-def test_zero_zones_exits():
+def test_zero_zones_exits() -> None:
     p = write_config({"zones": []})
     with pytest.raises(SystemExit):
         load_zones(p)
 
 
-def test_eleven_zones_exits():
+def test_eleven_zones_exits() -> None:
     p = write_config({"zones": [VALID_ZONE] * 11})
     with pytest.raises(SystemExit, match="11"):
         load_zones(p)
 
 
-def test_ten_zones_ok():
+def test_ten_zones_ok() -> None:
     zone_variants = [
         {**VALID_ZONE, "name": f"Zone {i}", "alert_email": f"z{i}@example.com"}
         for i in range(10)
@@ -124,35 +125,35 @@ def test_ten_zones_ok():
     "field",
     ["name", "description", "polygon", "threshold_multiplier", "alert_email"],
 )
-def test_missing_required_field_exits(field):
+def test_missing_required_field_exits(field: str) -> None:
     z = {k: v for k, v in VALID_ZONE.items() if k != field}
     p = write_config({"zones": [z]})
     with pytest.raises(SystemExit, match=field):
         load_zones(p)
 
 
-def test_empty_name_exits():
+def test_empty_name_exits() -> None:
     z = {**VALID_ZONE, "name": "   "}
     p = write_config({"zones": [z]})
     with pytest.raises(SystemExit):
         load_zones(p)
 
 
-def test_negative_threshold_exits():
+def test_negative_threshold_exits() -> None:
     z = {**VALID_ZONE, "threshold_multiplier": -1.0}
     p = write_config({"zones": [z]})
     with pytest.raises(SystemExit):
         load_zones(p)
 
 
-def test_zero_threshold_exits():
+def test_zero_threshold_exits() -> None:
     z = {**VALID_ZONE, "threshold_multiplier": 0}
     p = write_config({"zones": [z]})
     with pytest.raises(SystemExit):
         load_zones(p)
 
 
-def test_invalid_polygon_geojson_exits():
+def test_invalid_polygon_geojson_exits() -> None:
     z = {**VALID_ZONE, "polygon": {"type": "NotAType", "coordinates": []}}
     p = write_config({"zones": [z]})
     with pytest.raises(SystemExit):
@@ -164,7 +165,7 @@ def test_invalid_polygon_geojson_exits():
 # ---------------------------------------------------------------------------
 
 
-def test_polygon_below_1km2_exits():
+def test_polygon_below_1km2_exits() -> None:
     # ~100m × 100m box — well under 1 km²
     tiny = {
         **VALID_ZONE,
@@ -180,7 +181,7 @@ def test_polygon_below_1km2_exits():
         load_zones(p)
 
 
-def test_polygon_exactly_at_limit_passes():
+def test_polygon_exactly_at_limit_passes() -> None:
     # ~11km × 11km box — comfortably over 1 km²
     large = {
         **VALID_ZONE,
