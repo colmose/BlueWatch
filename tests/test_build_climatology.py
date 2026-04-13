@@ -1,10 +1,8 @@
 """Tests for scripts/build_climatology.py (T03)."""
 
 import importlib.util
-import os
-import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -254,13 +252,18 @@ def test_main_writes_netcdf_with_correct_structure(tmp_path, monkeypatch):
 
     assert out_path.exists(), "Output NetCDF was not created"
 
+
 def test_main_exits_on_empty_dataset(tmp_path, monkeypatch):
     """main() must exit loudly when CMEMS returns 0 time steps."""
     monkeypatch.setenv("CMEMS_USERNAME", "test_user")
     monkeypatch.setenv("CMEMS_PASSWORD", "test_pass")
     monkeypatch.setattr(_mod, "OUTPUT_PATH", tmp_path / "clim.nc")
 
-    empty_ds = _make_dataset(times=[], chl_values=np.zeros((0, 2, 2)), flag_values=np.zeros((0, 2, 2)))
+    empty_ds = _make_dataset(
+        times=[],
+        chl_values=np.zeros((0, 2, 2)),
+        flag_values=np.zeros((0, 2, 2)),
+    )
     with patch.object(_mod.copernicusmarine, "open_dataset", return_value=empty_ds):
         with pytest.raises(SystemExit) as exc_info:
             _mod.main()

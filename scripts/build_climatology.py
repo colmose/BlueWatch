@@ -23,9 +23,9 @@ import os
 import sys
 from pathlib import Path
 
+import copernicusmarine
 import numpy as np
 import xarray as xr
-import copernicusmarine
 
 # ---------------------------------------------------------------------------
 # Constants
