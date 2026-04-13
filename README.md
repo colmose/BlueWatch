@@ -44,6 +44,28 @@ SENDGRID_API_KEY=your_sendgrid_api_key
 SENDGRID_FROM_EMAIL=alerts@yourdomain.com
 ```
 
+### Alert log backend
+
+BlueWatch keeps SQLite as the default alert deduplication backend. If `DATABASE_URL` is unset, the pipeline creates and uses `data/alert_log.db` locally on first run.
+
+You can override that with:
+
+```bash
+# Explicit local SQLite file
+DATABASE_URL=sqlite:////absolute/path/to/alert_log.db
+
+# Managed Postgres, for example Supabase or Neon
+DATABASE_URL=postgres://user:password@host:5432/database
+# or
+DATABASE_URL=postgresql://user:password@host:5432/database
+```
+
+Notes:
+
+- SQLite remains the default and requires no extra configuration beyond the bundled dependencies.
+- Postgres uses the same `alert_log(zone_name, alert_date, alert_type)` schema and deduplicates with `ON CONFLICT DO NOTHING`.
+- Unsupported `DATABASE_URL` schemes are rejected at startup.
+
 ### Build the climatology baseline (one-time)
 
 Before running the pipeline, compute the per-pixel ISO-week climatological mean from the CMEMS L3 MY reprocessed product (2016–2024). This downloads a large dataset and may take a while.
@@ -100,7 +122,7 @@ BlueWatch/
 │   │   └── wci_chl_climatology_wk.nc # Pre-computed baseline (built once offline)
 │   ├── masks/
 │   │   └── wci_turbid_mask.geojson   # Turbid pixel exclusion polygons
-│   └── alert_log.db                  # SQLite dedup log (auto-created on first run)
+│   └── alert_log.db                  # Default local SQLite dedup log (auto-created)
 ├── logs/                             # Daily pipeline log files (auto-created)
 ├── bluewatch/
 │   ├── ingest.py                     # CMEMS API download
