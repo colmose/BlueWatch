@@ -8,9 +8,9 @@ select = ["E", "F", "I", "W"]
 
 [tool.mypy]
 python_version = "3.11"
+files = ["bluewatch", "scripts", "run_pipeline.py", "tests", "conftest.py"]
+strict = true
 ignore_missing_imports = true
-check_untyped_defs = true
-warn_return_any = true
 warn_unused_configs = true
 exclude = ["venv"]
 

@@ -1,10 +1,13 @@
 """Tests for scripts/build_climatology.py (T03)."""
 
 import importlib.util
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Protocol, cast
 from unittest.mock import patch
 
 import numpy as np
+import numpy.typing as npt
 import pytest
 import xarray as xr
 
@@ -19,16 +22,25 @@ assert _spec.loader is not None
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 
-apply_quality_mask = _mod.apply_quality_mask
-compute_weekly_climatology = _mod.compute_weekly_climatology
-DEFAULT_N_WEEKS = _mod.DEFAULT_N_WEEKS
+
+class _ComputeWeeklyClimatology(Protocol):
+    def __call__(self, chl: xr.DataArray, n_weeks: int | None = None) -> xr.DataArray: ...
+
+apply_quality_mask = cast(Callable[[xr.Dataset], xr.DataArray], _mod.apply_quality_mask)
+compute_weekly_climatology = cast(_ComputeWeeklyClimatology, _mod.compute_weekly_climatology)
+main = cast(Callable[[], None], _mod.main)
+DEFAULT_N_WEEKS = cast(int, _mod.DEFAULT_N_WEEKS)
 
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
-def _make_dataset(times, chl_values, flag_values):
+def _make_dataset(
+    times: Sequence[str],
+    chl_values: npt.ArrayLike,
+    flag_values: npt.ArrayLike,
+) -> xr.Dataset:
     """Build a minimal synthetic xarray Dataset mimicking CMEMS L3 output.
 
     Args:
@@ -60,7 +72,7 @@ def _week_of(date_str: str) -> int:
 # ---------------------------------------------------------------------------
 
 
-def test_good_flag_pixels_kept():
+def test_good_flag_pixels_kept() -> None:
     ds = _make_dataset(
         times=["2018-01-08"],
         chl_values=[[[1.0, 2.0], [3.0, 4.0]]],
@@ -71,7 +83,7 @@ def test_good_flag_pixels_kept():
     assert not np.isnan(float(masked.isel(time=0, lat=1, lon=1)))
 
 
-def test_bad_flag_pixels_become_nan():
+def test_bad_flag_pixels_become_nan() -> None:
     ds = _make_dataset(
         times=["2018-01-08"],
         chl_values=[[[1.0, 2.0], [3.0, 4.0]]],
@@ -84,7 +96,7 @@ def test_bad_flag_pixels_become_nan():
     assert float(masked.isel(time=0, lat=1, lon=1)) == pytest.approx(4.0)
 
 
-def test_all_bad_flags_all_nan():
+def test_all_bad_flags_all_nan() -> None:
     ds = _make_dataset(
         times=["2018-01-08"],
         chl_values=[[[5.0, 6.0], [7.0, 8.0]]],
@@ -99,7 +111,7 @@ def test_all_bad_flags_all_nan():
 # ---------------------------------------------------------------------------
 
 
-def test_output_has_52_weeks_by_default():
+def test_output_has_52_weeks_by_default() -> None:
     # 3 days each in week 1, 10, 52
     dates = ["2018-01-01", "2018-01-02", "2018-01-03",   # week 1
              "2018-03-05", "2018-03-06", "2018-03-07",   # week 10
@@ -117,7 +129,7 @@ def test_output_has_52_weeks_by_default():
     assert int(clim.week.values[-1]) == DEFAULT_N_WEEKS
 
 
-def test_weekly_mean_values_correct():
+def test_weekly_mean_values_correct() -> None:
     # Week 1: two days with CHL values 2.0 and 4.0 → mean 3.0
     ds = _make_dataset(
         times=["2018-01-01", "2018-01-02"],
@@ -132,7 +144,7 @@ def test_weekly_mean_values_correct():
     assert week1_mean == pytest.approx(3.0)
 
 
-def test_bad_pixels_excluded_from_mean():
+def test_bad_pixels_excluded_from_mean() -> None:
     # Week 1: day 1 has CHL=2.0 (good), day 2 has CHL=10.0 but flag=0 (bad)
     # Expected mean: 2.0 (bad pixel masked before groupby)
     ds = _make_dataset(
@@ -148,7 +160,7 @@ def test_bad_pixels_excluded_from_mean():
     assert week1_mean == pytest.approx(2.0)
 
 
-def test_weeks_with_no_data_are_nan():
+def test_weeks_with_no_data_are_nan() -> None:
     # Only provide data for week 10; all other weeks should be NaN
     ds = _make_dataset(
         times=["2018-03-05"],
@@ -167,7 +179,7 @@ def test_weeks_with_no_data_are_nan():
 # ---------------------------------------------------------------------------
 
 
-def test_week_53_preserved_as_separate_slice():
+def test_week_53_preserved_as_separate_slice() -> None:
     """Days in ISO week 53 must remain in a distinct climatology slice."""
     # 2020-12-28 is in ISO week 53 of 2020
     date_w53 = "2020-12-28"
@@ -200,26 +212,26 @@ def test_week_53_preserved_as_separate_slice():
 # ---------------------------------------------------------------------------
 
 
-def test_main_exits_on_missing_credentials(monkeypatch):
+def test_main_exits_on_missing_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CMEMS_USERNAME", raising=False)
     monkeypatch.delenv("CMEMS_PASSWORD", raising=False)
     with pytest.raises(SystemExit) as exc_info:
-        _mod.main()
+        main()
     assert exc_info.value.code != 0
 
 
-def test_main_exits_if_only_username_set(monkeypatch):
+def test_main_exits_if_only_username_set(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CMEMS_USERNAME", "user")
     monkeypatch.delenv("CMEMS_PASSWORD", raising=False)
     with pytest.raises(SystemExit):
-        _mod.main()
+        main()
 
 
-def test_main_exits_if_only_password_set(monkeypatch):
+def test_main_exits_if_only_password_set(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CMEMS_USERNAME", raising=False)
     monkeypatch.setenv("CMEMS_PASSWORD", "pass")
     with pytest.raises(SystemExit):
-        _mod.main()
+        main()
 
 
 # ---------------------------------------------------------------------------
@@ -227,7 +239,10 @@ def test_main_exits_if_only_password_set(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_main_writes_netcdf_with_correct_structure(tmp_path, monkeypatch):
+def test_main_writes_netcdf_with_correct_structure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """main() should produce a NetCDF with 52 weeks when no ISO week 53 is present."""
     monkeypatch.setenv("CMEMS_USERNAME", "test_user")
     monkeypatch.setenv("CMEMS_PASSWORD", "test_pass")
@@ -250,7 +265,7 @@ def test_main_writes_netcdf_with_correct_structure(tmp_path, monkeypatch):
     )
 
     with patch.object(_mod.copernicusmarine, "open_dataset", return_value=fake_ds):
-        _mod.main()
+        main()
 
     assert out_path.exists(), "Output NetCDF was not created"
     out_ds = xr.open_dataset(out_path)
@@ -259,7 +274,10 @@ def test_main_writes_netcdf_with_correct_structure(tmp_path, monkeypatch):
     assert "CHL_mean" in out_ds.data_vars
 
 
-def test_main_writes_week_53_slice_when_present(tmp_path, monkeypatch):
+def test_main_writes_week_53_slice_when_present(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """main() should preserve week 53 when the source data contains it."""
     monkeypatch.setenv("CMEMS_USERNAME", "test_user")
     monkeypatch.setenv("CMEMS_PASSWORD", "test_pass")
@@ -273,7 +291,7 @@ def test_main_writes_week_53_slice_when_present(tmp_path, monkeypatch):
     )
 
     with patch.object(_mod.copernicusmarine, "open_dataset", return_value=fake_ds):
-        _mod.main()
+        main()
 
     out_ds = xr.open_dataset(out_path)
     assert out_ds.sizes["week"] == 53
@@ -281,7 +299,10 @@ def test_main_writes_week_53_slice_when_present(tmp_path, monkeypatch):
     assert float(out_ds["CHL_mean"].sel(week=53).isel(lat=0, lon=0)) == pytest.approx(4.0)
 
 
-def test_main_exits_on_empty_dataset(tmp_path, monkeypatch):
+def test_main_exits_on_empty_dataset(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """main() must exit loudly when CMEMS returns 0 time steps."""
     monkeypatch.setenv("CMEMS_USERNAME", "test_user")
     monkeypatch.setenv("CMEMS_PASSWORD", "test_pass")
@@ -294,5 +315,5 @@ def test_main_exits_on_empty_dataset(tmp_path, monkeypatch):
     )
     with patch.object(_mod.copernicusmarine, "open_dataset", return_value=empty_ds):
         with pytest.raises(SystemExit) as exc_info:
-            _mod.main()
+            main()
     assert exc_info.value.code != 0

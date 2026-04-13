@@ -11,6 +11,7 @@ import numpy as np
 import shapely
 import xarray as xr
 from shapely.geometry import shape
+from shapely.geometry.base import BaseGeometry
 
 from bluewatch.config import Zone
 
@@ -69,7 +70,7 @@ def load_climatology_week(week: int, clim_path: Path = CLIMATOLOGY_PATH) -> xr.D
     return ds["CHL_mean"].sel(week=week)
 
 
-def load_turbid_polygons(mask_path: Path = TURBID_MASK_PATH) -> list:
+def load_turbid_polygons(mask_path: Path = TURBID_MASK_PATH) -> list[BaseGeometry]:
     """Return a list of shapely Polygon objects from the turbid mask GeoJSON (FR-10)."""
     if not mask_path.exists():
         sys.exit(f"ERROR: turbid mask file not found: {mask_path}")
@@ -77,7 +78,11 @@ def load_turbid_polygons(mask_path: Path = TURBID_MASK_PATH) -> list:
     return [shape(f["geometry"]) for f in gj["features"]]
 
 
-def build_polygon_mask(lats: np.ndarray, lons: np.ndarray, polygon) -> np.ndarray:
+def build_polygon_mask(
+    lats: np.ndarray,
+    lons: np.ndarray,
+    polygon: BaseGeometry,
+) -> np.ndarray:
     """Return boolean (lat, lon) array — True if pixel centre is inside polygon.
 
     Args:
