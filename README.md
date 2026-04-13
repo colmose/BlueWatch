@@ -13,7 +13,7 @@ Current scope: **west coast of Ireland MVP** (Donegal Bay to Bantry Bay). See [`
 1. **Ingest** — downloads the CMEMS L3 NRT Atlantic Chl-a product (`cmems_obs-oc_atl_bgc-plankton_nrt_l3-olci-300m_P1D`) for the WCI bounding box
 2. **Mask** — excludes turbid coastal pixels (Shannon Estuary, inner Galway Bay, etc.) via a static GeoJSON mask
 3. **Compute** — calculates a zone-averaged anomaly ratio (`current Chl-a / climatological mean for that ISO week`) for each configured polygon
-4. **Alert** — sends a SendGrid email when a zone's ratio meets or exceeds its configured threshold (default 3×); logs a gap notification if cloud cover persists for ≥3 days
+4. **Alert** — sends a Resend email when a zone's ratio meets or exceeds its configured threshold (default 3×); logs a gap notification if cloud cover persists for ≥3 days
 
 Cloud gaps are first-class status — the pipeline never silently fails or substitutes interpolated data without disclosure.
 
@@ -25,7 +25,7 @@ Cloud gaps are first-class status — the pipeline never silently fails or subst
 
 - Python 3.11+
 - A [CMEMS Marine Data Store](https://marine.copernicus.eu/) account (free)
-- A [SendGrid](https://sendgrid.com/) account with a verified sender (free tier: 100 emails/day)
+- A [Resend](https://resend.com/) account with an API key and verified sender
 
 ### Install
 
@@ -40,8 +40,8 @@ Copy `.env.example` to `.env` and fill in:
 ```bash
 CMEMS_USERNAME=your_cmems_username
 CMEMS_PASSWORD=your_cmems_password
-SENDGRID_API_KEY=your_sendgrid_api_key
-SENDGRID_FROM_EMAIL=alerts@yourdomain.com
+RESEND_API_KEY=your_resend_api_key
+BLUEWATCH_FROM_EMAIL=alerts@yourdomain.com
 ```
 
 ### Alert log backend
@@ -127,7 +127,7 @@ BlueWatch/
 ├── bluewatch/
 │   ├── ingest.py                     # CMEMS API download
 │   ├── anomaly_engine.py             # Climatology load, masking, anomaly calc
-│   ├── alert_dispatcher.py           # Threshold check, SendGrid dispatch, dedup
+│   ├── alert_dispatcher.py           # Threshold check, Resend dispatch, dedup
 │   └── config.py                     # Zone config loader and validator
 ├── scripts/
 │   └── build_climatology.py          # One-time offline baseline builder

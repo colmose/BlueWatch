@@ -106,7 +106,7 @@ BlueWatch West Coast Ireland MVP is a minimal server-side pipeline and alert sys
 - **FR-16** Alert emails SHALL include: zone name, alert date, current zone-averaged Chl-a (mg/m³), climatological mean for that calendar week, anomaly ratio, valid pixel count, and a plain-language summary sentence.
 - **FR-17** The system SHALL NOT send more than one alert email per zone per calendar day, regardless of how many times the pipeline is run.
 - **FR-18** Gap notification emails (FR-04) SHALL be clearly distinguished from anomaly alert emails in subject line and body.
-- **FR-19** Email dispatch SHALL use the SendGrid API (`sendgrid` Python SDK). The SendGrid API key SHALL be stored as an environment variable (`SENDGRID_API_KEY`). The system SHALL log a clear error and exit non-zero if dispatch fails — it SHALL NOT silently drop alerts.
+- **FR-19** Email dispatch SHALL use the Resend API. The Resend API key SHALL be stored as an environment variable (`RESEND_API_KEY`). The system SHALL log a clear error and exit non-zero if dispatch fails — it SHALL NOT silently drop alerts.
 
 ### 7.6 Scheduling & Operations
 
@@ -134,8 +134,8 @@ BlueWatch West Coast Ireland MVP is a minimal server-side pipeline and alert sys
 ### Stack
 
 - **Language:** Python 3.11+
-- **Core libraries:** `copernicusmarine` (official CMEMS Python toolbox), `xarray`, `netCDF4`, `shapely 2.x`, `geopandas`, `numpy`, `pyyaml`, `sendgrid`
-- **Alerting:** `sendgrid` Python SDK (free tier, 100 emails/day — sufficient for MVP alert volume)
+- **Core libraries:** `copernicusmarine` (official CMEMS Python toolbox), `xarray`, `netCDF4`, `shapely 2.x`, `geopandas`, `numpy`, `pyyaml`
+- **Alerting:** Resend API over HTTPS (sufficient for MVP alert volume without an extra SDK dependency)
 - **Scheduling:** OS cron or GitHub Actions scheduled workflow
 
 ### Architecture
@@ -229,7 +229,7 @@ BlueWatch/
 | AC-07 | Cloud gap handling | When <20% valid pixels exist for a zone, log shows `CLOUD_GAP` and no anomaly email is sent |
 | AC-08 | Gap notification after 3 days | A gap notification email is sent when a zone records 3 consecutive days of `CLOUD_GAP` |
 | AC-09 | Loud failure on credential error | If `CMEMS_USERNAME` or `CMEMS_PASSWORD` env vars are missing, pipeline exits with non-zero code and a clear error message |
-| AC-10 | Loud failure on email error | If SMTP dispatch fails, pipeline exits non-zero and logs the failure — does not silently continue |
+| AC-10 | Loud failure on email error | If Resend dispatch fails, pipeline exits non-zero and logs the failure — does not silently continue |
 | AC-11 | Zone validation | A zone polygon smaller than 1 km² in zones.yaml causes pipeline to exit at startup with a descriptive error |
 | AC-12 | Daily log written | `logs/pipeline_YYYY-MM-DD.jsonl` is created with at least one JSON line containing `run_timestamp`, `zone_name`, `status`, `anomaly_ratio` |
 
@@ -244,7 +244,7 @@ BlueWatch/
 - [ ] **T05** Implement `bluewatch/ingest.py`: use `copernicusmarine.subset()` to download the most recent L3 NRT Chl-a product for the WCI bounding box; apply `CHL_flags == 1` quality filter; return an `xarray.Dataset`. Use env vars for credentials. (FR-01, FR-02)
 - [ ] **T06** Implement `bluewatch/anomaly_engine.py`: load climatology week slice, apply turbidity mask, compute per-pixel anomaly ratio, compute zone-averaged anomaly and valid pixel count per configured zone, determine `DATA_AVAILABLE` vs `CLOUD_GAP` status. (FR-03, FR-07, FR-08, FR-09, FR-10, FR-11)
 - [ ] **T07** Create `data/alert_log.db` initialisation logic in `bluewatch/alert_dispatcher.py`: SQLite table `alert_log(zone_name TEXT, alert_date DATE, alert_type TEXT, PRIMARY KEY(zone_name, alert_date, alert_type))`. (FR-17)
-- [ ] **T08** Implement `bluewatch/alert_dispatcher.py`: threshold check, deduplication query, SendGrid API send for anomaly alerts and gap notifications. Raise on SendGrid API failure. (FR-15, FR-16, FR-17, FR-18, FR-19)
+- [ ] **T08** Implement `bluewatch/alert_dispatcher.py`: threshold check, deduplication query, Resend API send for anomaly alerts and gap notifications. Raise on dispatch failure. (FR-15, FR-16, FR-17, FR-18, FR-19)
 - [ ] **T09** Implement `run_pipeline.py`: orchestrate ingest → anomaly engine → alert dispatcher; write structured JSON lines to stdout and to `logs/pipeline_YYYY-MM-DD.jsonl`; exit non-zero on any unhandled error. (FR-20, FR-22)
 - [ ] **T10** Write `config/zones.yaml` with at least two real west coast of Ireland aquaculture zones (e.g. outer Clew Bay, outer Killary Harbour) using coordinates from public aquaculture licensing maps. (FR-12)
 - [ ] **T11** End-to-end test: run `python run_pipeline.py` against a historical date with known CMEMS data availability; verify log output, anomaly values, and (if threshold met) email receipt. Confirm AC-01 through AC-12.
@@ -279,5 +279,5 @@ BlueWatch/
 | ~~OQ-0~~ | Should MVP cover all of Ireland or a subset? | West coast only (Atlantic-facing, lower turbidity, better OC5 algorithm performance per idea doc). East coast, estuaries, and inner bays deferred. |
 | ~~OQ-1~~ | Which CMEMS L3 NRT product — Atlantic regional or global? | Atlantic regional: `cmems_obs-oc_atl_bgc-plankton_nrt_l3-olci-300m_P1D`. Better coastal resolution for the WCI bounding box. |
 | ~~OQ-2~~ | ISO calendar-week climatology vs. rolling 30-day window? | ISO-week for v1 (simpler). Flag a TODO in `build_climatology.py` to experiment with rolling window in a later iteration. |
-| ~~OQ-3~~ | SMTP (personal account) vs. transactional email service? | SendGrid API (free tier, 100 emails/day). Sufficient for MVP volume; avoids Gmail/Fastmail deliverability issues. |
+| ~~OQ-3~~ | SMTP (personal account) vs. transactional email service? | Resend API. Sufficient for MVP volume and simpler to wire into the current implementation. |
 | ~~OQ-4~~ | Beta testers from real west coast of Ireland aquaculture operators? | Multiple operators available; willingness to be named testers to be confirmed. |

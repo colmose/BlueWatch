@@ -226,12 +226,13 @@ def test_data_available_when_sufficient_valid_pixels(tmp_path):
     assert r.status == "DATA_AVAILABLE"
     assert r.anomaly_ratio == pytest.approx(3.0, rel=0.01)
     assert r.zone_avg_chl == pytest.approx(6.0, rel=0.01)
+    assert r.climatology_mean_chl == pytest.approx(2.0, rel=0.01)
     assert r.valid_pixel_count > 0
     assert r.total_pixel_count > 0
 
 
 def test_zone_result_has_required_fields(tmp_path):
-    """AC-04: zone result contains anomaly_ratio, valid_pixel_count, zone_avg_chl."""
+    """AC-04: zone result contains anomaly_ratio, valid_pixel_count, and means."""
     lats = (53.0, 53.1, 53.2)
     lons = (-10.0, -9.9, -9.8)
     chl_ds = _make_chl_dataset(
@@ -249,6 +250,7 @@ def test_zone_result_has_required_fields(tmp_path):
     assert isinstance(r.anomaly_ratio, float)
     assert isinstance(r.valid_pixel_count, int)
     assert isinstance(r.zone_avg_chl, float)
+    assert isinstance(r.climatology_mean_chl, float)
 
 
 # ---------------------------------------------------------------------------
@@ -273,6 +275,7 @@ def test_cloud_gap_when_all_chl_nan(tmp_path):
     assert r.status == "CLOUD_GAP"
     assert r.anomaly_ratio is None
     assert r.zone_avg_chl is None
+    assert r.climatology_mean_chl is None
 
 
 def test_cloud_gap_when_valid_fraction_below_threshold(tmp_path):

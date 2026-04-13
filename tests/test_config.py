@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from bluewatch.config import Zone, load_zones
+from bluewatch.config import CONFIG_PATH, Zone, load_zones
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -194,3 +194,11 @@ def test_polygon_exactly_at_limit_passes():
     p = write_config({"zones": [large]})
     zones = load_zones(p)
     assert len(zones) == 1
+
+
+def test_repository_zones_yaml_loads() -> None:
+    zones = load_zones(CONFIG_PATH)
+
+    assert len(zones) >= 2
+    assert zones[0].name == "Outer Clew Bay"
+    assert zones[1].name == "Outer Killary Harbour"
