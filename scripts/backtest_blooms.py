@@ -36,7 +36,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from bluewatch.anomaly_engine import compute_zone_results
 from bluewatch.config import load_zones
 from tests.fixtures.bloom_fixtures import (
-    BloomEvent,
     build_bloom_fixture,
     build_climatology_fixture,
     load_bloom_catalog,

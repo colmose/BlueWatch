@@ -22,7 +22,6 @@ import yaml
 
 from bluewatch.anomaly_engine import compute_zone_results
 from bluewatch.config import load_zones
-
 from tests.fixtures.bloom_fixtures import (
     CATALOG_PATH,
     BloomEvent,
@@ -119,7 +118,7 @@ def test_catalog_dates_are_valid_iso():
 
 
 def test_catalog_alert_events_above_threshold():
-    """Events with should_alert=True must have synthetic_anomaly_ratio >= 3.0 (default threshold)."""
+    """Events with should_alert=True must have synthetic_anomaly_ratio >= default threshold."""
     DEFAULT_THRESHOLD = 3.0
     events = load_bloom_catalog()
     for event in events:
@@ -188,7 +187,6 @@ def test_build_bloom_fixture_zone_pixels_at_bloom_chl(tmp_path):
     lons = chl.lon.values
 
     expected_bloom = background * event.synthetic_anomaly_ratio
-    import numpy as np
     from shapely.geometry import Point
 
     # Check at least one interior pixel has bloom CHL
@@ -343,7 +341,6 @@ def test_sub_threshold_event_does_not_alert(tmp_path):
 def test_unknown_zone_name_is_skipped_cleanly():
     """A catalog event referencing an unconfigured zone must be gracefully skipped."""
     zones = load_zones(ZONES_CONFIG_PATH)
-    zone_names = {z.name for z in zones}
     zone = _zone_by_name(zones, "Zone That Does Not Exist")
     assert zone is None, "Expected None for unknown zone name"
 
@@ -523,7 +520,8 @@ def test_build_synthetic_climatology_covers_zone(tmp_path):
     # All CHL_mean values must equal the default base_chl
     chl_vals = ds["CHL_mean"].values
     assert np.all(~np.isnan(chl_vals)), "CHL_mean contains NaN values"
-    assert np.allclose(chl_vals, 2.0, atol=1e-4), f"Expected all CHL_mean=2.0, got {np.unique(chl_vals)}"
+    unique_vals = np.unique(chl_vals)
+    assert np.allclose(chl_vals, 2.0, atol=1e-4), f"Expected all CHL_mean=2.0, got {unique_vals}"
 
 
 def test_backtest_script_exits_one_on_failure(tmp_path, monkeypatch, capsys):
