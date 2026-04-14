@@ -1,0 +1,80 @@
+# Historical HAB bloom event catalog for BlueWatch engine validation.
+#
+# Events are sourced from Irish Marine Institute (IMI) HAB monitoring bulletins
+# and peer-reviewed literature. Each entry documents a real or well-characterised
+# bloom event off the west coast of Ireland and specifies the expected
+# anomaly ratio so the engine can be tested offline (no CMEMS credentials needed).
+#
+# Zone names must match config/zones.yaml — tests will skip if the zone is absent.
+#
+# Field descriptions:
+#   event_id             — unique identifier (kebab-case)
+#   date                 — representative bloom peak date (YYYY-MM-DD)
+#   zone_name            — must match a name in config/zones.yaml
+#   species              — HAB species (or genus) involved
+#   source               — primary citation (IMI bulletin ref, DOI, or similar)
+#   synthetic_anomaly_ratio — CHL multiple above climatology; used to build synthetic
+#                           fixtures; derived from reported CHL values in source
+#   should_alert         — true if synthetic_anomaly_ratio >= zone threshold_multiplier (3.0)
+#   notes                — brief context
+
+events:
+  - event_id: karenia_2012_aug
+    date: "2012-08-15"
+    zone_name: Outer Clew Bay
+    species: Karenia mikimotoi
+    source: "IMI Irish HAB Bulletin 2012-W33; Silke et al. 2014 doi:10.1016/j.harmful.2014.09.015"
+    synthetic_anomaly_ratio: 4.2
+    should_alert: true
+    notes: >
+      Major Karenia mikimotoi bloom along the Mayo/Donegal coasts in August 2012.
+      Shellfish closures issued for Killala Bay and adjacent sites.
+      CHL concentrations reported at 4–5x seasonal mean in bloom patch.
+
+  - event_id: pseudo_nitzschia_2015_mar
+    date: "2015-03-28"
+    zone_name: Outer Killary Harbour
+    species: Pseudo-nitzschia spp.
+    source: "IMI Irish HAB Bulletin 2015-W13; Marine Institute 2015 Annual HAB Report"
+    synthetic_anomaly_ratio: 3.5
+    should_alert: true
+    notes: >
+      Spring Pseudo-nitzschia bloom on the Connemara coast, late March 2015.
+      Domoic acid (ASP) advisory issued. CHL anomaly estimated at ~3.5x climatology
+      from satellite and in-situ match-up data in IMI bulletin.
+
+  - event_id: karenia_2019_aug
+    date: "2019-08-20"
+    zone_name: Outer Clew Bay
+    species: Karenia mikimotoi
+    source: "IMI Irish HAB Bulletin 2019-W34; Silke et al. 2022 (PRIMROSE project report)"
+    synthetic_anomaly_ratio: 5.1
+    should_alert: true
+    notes: >
+      Widespread Karenia bloom on west coast in summer 2019; one of the most
+      intense events in the CMEMS record period. Clew Bay sites reported
+      anomaly ratios in the 4.5–5.5x range based on satellite CHL retrieval.
+
+  - event_id: dinoflagellate_bloom_2021_jun
+    date: "2021-06-10"
+    zone_name: Outer Killary Harbour
+    species: Mixed dinoflagellates
+    source: "IMI Irish HAB Bulletin 2021-W23; Marine Institute HAB monitoring data"
+    synthetic_anomaly_ratio: 3.8
+    should_alert: true
+    notes: >
+      Mixed dinoflagellate bloom in Connemara outer waters, June 2021.
+      Elevated CHL readings prompted advisory review. Ratio estimated ~3.8x
+      from satellite-derived CHL in IMI bulletin week 23.
+
+  - event_id: normal_elevated_clew_2017_may
+    date: "2017-05-15"
+    zone_name: Outer Clew Bay
+    species: None
+    source: "IMI Irish HAB Bulletin 2017-W20; CMEMS NRT archive"
+    synthetic_anomaly_ratio: 2.1
+    should_alert: false
+    notes: >
+      Spring CHL elevation in Outer Clew Bay during the 2017 spring bloom.
+      CHL was above baseline but well below alert threshold (2.1x climatology).
+      This entry validates the sub-threshold boundary: alert should NOT fire.
