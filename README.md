@@ -44,6 +44,14 @@ RESEND_API_KEY=your_resend_api_key
 BLUEWATCH_FROM_EMAIL=alerts@yourdomain.com
 ```
 
+`run_pipeline.py` and `scripts/build_climatology.py` will read values from `.env`
+automatically when exported environment variables are missing. Exported variables still
+take precedence.
+
+If you want shell variables available to every child process, `source .env` alone is not
+enough in `zsh` unless the file contains `export ...` lines. Use `set -a; source .env; set +a`
+if you specifically want the shell to export them.
+
 ### Alert log backend
 
 BlueWatch keeps SQLite as the default alert deduplication backend. If `DATABASE_URL` is unset, the pipeline creates and uses `data/alert_log.db` locally on first run.

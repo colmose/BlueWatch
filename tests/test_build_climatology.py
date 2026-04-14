@@ -1,6 +1,9 @@
 """Tests for scripts/build_climatology.py (T03)."""
 
 import importlib.util
+import os
+import subprocess
+import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Protocol, cast
@@ -16,6 +19,7 @@ import xarray as xr
 # ---------------------------------------------------------------------------
 
 _SCRIPT_PATH = Path(__file__).parent.parent / "scripts" / "build_climatology.py"
+_REPO_ROOT = Path(__file__).parent.parent
 _spec = importlib.util.spec_from_file_location("build_climatology", _SCRIPT_PATH)
 assert _spec is not None
 assert _spec.loader is not None
@@ -94,6 +98,26 @@ def test_bad_flag_pixels_become_nan() -> None:
     assert np.isnan(float(masked.isel(time=0, lat=0, lon=1)))
     assert np.isnan(float(masked.isel(time=0, lat=1, lon=0)))
     assert float(masked.isel(time=0, lat=1, lon=1)) == pytest.approx(4.0)
+
+
+def test_current_flags_schema_masks_land_pixels() -> None:
+    ds = xr.Dataset(
+        {
+            "CHL": (["time", "lat", "lon"], np.array([[[1.0, 2.0], [3.0, 4.0]]], dtype=np.float32)),
+            "flags": (["time", "lat", "lon"], np.array([[[0, 1], [0, 1]]], dtype=np.int8)),
+        },
+        coords={
+            "time": np.array(["2018-01-08"], dtype="datetime64[ns]"),
+            "lat": np.array([53.0, 53.1]),
+            "lon": np.array([-10.0, -9.9]),
+        },
+    )
+    ds["flags"].attrs.update({"flag_masks": 1, "flag_meanings": "LAND"})
+
+    masked = apply_quality_mask(ds)
+
+    assert float(masked.isel(time=0, lat=0, lon=0)) == pytest.approx(1.0)
+    assert np.isnan(float(masked.isel(time=0, lat=0, lon=1)))
 
 
 def test_all_bad_flags_all_nan() -> None:
@@ -213,8 +237,8 @@ def test_week_53_preserved_as_separate_slice() -> None:
 
 
 def test_main_exits_on_missing_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("CMEMS_USERNAME", raising=False)
-    monkeypatch.delenv("CMEMS_PASSWORD", raising=False)
+    monkeypatch.setenv("CMEMS_USERNAME", "")
+    monkeypatch.setenv("CMEMS_PASSWORD", "")
     with pytest.raises(SystemExit) as exc_info:
         main()
     assert exc_info.value.code != 0
@@ -222,16 +246,97 @@ def test_main_exits_on_missing_credentials(monkeypatch: pytest.MonkeyPatch) -> N
 
 def test_main_exits_if_only_username_set(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CMEMS_USERNAME", "user")
-    monkeypatch.delenv("CMEMS_PASSWORD", raising=False)
+    monkeypatch.setenv("CMEMS_PASSWORD", "")
     with pytest.raises(SystemExit):
         main()
 
 
 def test_main_exits_if_only_password_set(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("CMEMS_USERNAME", raising=False)
+    monkeypatch.setenv("CMEMS_USERNAME", "")
     monkeypatch.setenv("CMEMS_PASSWORD", "pass")
     with pytest.raises(SystemExit):
         main()
+
+
+def test_main_reads_credentials_from_dotenv(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CMEMS_USERNAME", raising=False)
+    monkeypatch.delenv("CMEMS_PASSWORD", raising=False)
+    (tmp_path / ".env").write_text(
+        "CMEMS_USERNAME=dotenv-user\nCMEMS_PASSWORD=dotenv-pass\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(_mod, "OUTPUT_PATH", tmp_path / "clim.nc")
+
+    fake_ds = _make_dataset(
+        times=["2018-01-01"],
+        chl_values=[[[2.0, 2.0], [2.0, 2.0]]],
+        flag_values=[[[1, 1], [1, 1]]],
+    )
+    captured: dict[str, str] = {}
+
+    def fake_open_dataset(**kwargs: object) -> xr.Dataset:
+        captured["username"] = str(kwargs["username"])
+        captured["password"] = str(kwargs["password"])
+        return fake_ds
+
+    with patch.object(_mod.copernicusmarine, "open_dataset", side_effect=fake_open_dataset):
+        main()
+
+    assert captured == {"username": "dotenv-user", "password": "dotenv-pass"}
+
+
+def test_script_can_run_directly_from_repo_root(tmp_path: Path) -> None:
+    env = os.environ.copy()
+    env["CMEMS_USERNAME"] = ""
+    env["CMEMS_PASSWORD"] = ""
+
+    result = subprocess.run(
+        [sys.executable, "scripts/build_climatology.py"],
+        cwd=_REPO_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "CMEMS_USERNAME and CMEMS_PASSWORD" in result.stderr
+    assert "ModuleNotFoundError" not in result.stderr
+
+
+def test_main_falls_back_to_current_quality_variable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CMEMS_USERNAME", "test_user")
+    monkeypatch.setenv("CMEMS_PASSWORD", "test_pass")
+    monkeypatch.setattr(_mod, "OUTPUT_PATH", tmp_path / "clim.nc")
+
+    fake_ds = _make_dataset(
+        times=["2018-01-01"],
+        chl_values=[[[2.0, 2.0], [2.0, 2.0]]],
+        flag_values=[[[1, 1], [1, 1]]],
+    ).rename({"CHL_flags": "flags"})
+    fake_ds["flags"].attrs.update({"flag_masks": 1, "flag_meanings": "LAND"})
+    attempted_variables: list[list[str]] = []
+
+    def fake_open_dataset(**kwargs: object) -> xr.Dataset:
+        variables = list(cast(list[str], kwargs["variables"]))
+        attempted_variables.append(variables)
+        if variables == ["CHL", "CHL_flags"]:
+            raise RuntimeError(
+                "The variable 'CHL_flags' is neither a variable or a standard name in the dataset."
+            )
+        return fake_ds
+
+    with patch.object(_mod.copernicusmarine, "open_dataset", side_effect=fake_open_dataset):
+        main()
+
+    assert attempted_variables == [["CHL", "CHL_flags"], ["CHL", "flags"]]
 
 
 # ---------------------------------------------------------------------------

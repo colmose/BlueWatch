@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import datetime
-import os
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any, cast
 
 import xarray as xr
+
+from bluewatch.cmems import (
+    build_valid_chl_mask,
+    is_missing_quality_variable_error,
+    variable_request_candidates,
+)
+from bluewatch.env import get_env
 
 try:
     import copernicusmarine as _copernicusmarine
@@ -46,7 +52,7 @@ class CMEMSDownloadError(RuntimeError):
 def apply_quality_filter(ds: xr.Dataset) -> xr.Dataset:
     """Return a copy of ds with non-flag-1 CHL pixels masked to NaN."""
     filtered = ds.copy()
-    filtered["CHL"] = ds["CHL"].where(ds["CHL_flags"] == 1)
+    filtered["CHL"] = ds["CHL"].where(build_valid_chl_mask(ds))
     return filtered
 
 
@@ -78,8 +84,8 @@ def fetch_latest_chl(date: datetime.date | None = None) -> xr.Dataset:
 
 
 def _require_credentials() -> tuple[str, str]:
-    username = os.environ.get("CMEMS_USERNAME")
-    password = os.environ.get("CMEMS_PASSWORD")
+    username = get_env("CMEMS_USERNAME")
+    password = get_env("CMEMS_PASSWORD")
 
     if not username or not password:
         sys.exit(
@@ -102,26 +108,41 @@ def _candidate_dates(date: datetime.date | None) -> list[datetime.date]:
 
 
 def _download_subset(username: str, password: str, date_str: str, out_file: Path) -> None:
-    try:
-        copernicusmarine.subset(
-            dataset_id=DATASET_ID,
-            variables=["CHL", "CHL_flags"],
-            minimum_longitude=MIN_LON,
-            maximum_longitude=MAX_LON,
-            minimum_latitude=MIN_LAT,
-            maximum_latitude=MAX_LAT,
-            start_datetime=date_str,
-            end_datetime=date_str,
-            output_filename=out_file.name,
-            output_directory=str(out_file.parent),
-            username=username,
-            password=password,
-        )
-    except Exception as exc:
-        raise CMEMSDownloadError(f"ERROR: CMEMS download failed for {date_str}: {exc}") from exc
+    compatibility_errors: list[str] = []
 
-    if not out_file.exists():
-        raise CMEMSDownloadError(
-            f"ERROR: copernicusmarine.subset() did not create expected output file "
-            f"{out_file} - check CMEMS product availability for {date_str}."
-        )
+    for variables in variable_request_candidates():
+        try:
+            out_file.unlink(missing_ok=True)
+            copernicusmarine.subset(
+                dataset_id=DATASET_ID,
+                variables=list(variables),
+                minimum_longitude=MIN_LON,
+                maximum_longitude=MAX_LON,
+                minimum_latitude=MIN_LAT,
+                maximum_latitude=MAX_LAT,
+                start_datetime=date_str,
+                end_datetime=date_str,
+                output_filename=out_file.name,
+                output_directory=str(out_file.parent),
+                username=username,
+                password=password,
+            )
+        except Exception as exc:
+            if is_missing_quality_variable_error(exc, variables[1]):
+                compatibility_errors.append(str(exc))
+                continue
+            raise CMEMSDownloadError(f"ERROR: CMEMS download failed for {date_str}: {exc}") from exc
+
+        if not out_file.exists():
+            raise CMEMSDownloadError(
+                f"ERROR: copernicusmarine.subset() did not create expected output file "
+                f"{out_file} - check CMEMS product availability for {date_str}."
+            )
+
+        return
+
+    compatibility_detail = "; ".join(compatibility_errors)
+    raise CMEMSDownloadError(
+        f"ERROR: CMEMS download failed for {date_str}: no supported quality variable "
+        f"was available ({compatibility_detail})"
+    )

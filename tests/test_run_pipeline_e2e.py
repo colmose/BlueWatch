@@ -195,8 +195,8 @@ def test_cli_e2e_gap_notification_after_three_days(tmp_path: Path) -> None:
 
 def test_cli_e2e_fails_loudly_without_cmems_credentials(tmp_path: Path) -> None:
     env = _base_env(tmp_path, chl_fixture="chl_threshold_breach.nc")
-    env.pop("CMEMS_USERNAME")
-    env.pop("CMEMS_PASSWORD")
+    env["CMEMS_USERNAME"] = ""
+    env["CMEMS_PASSWORD"] = ""
 
     result = _run_pipeline(
         [
