@@ -3,11 +3,12 @@
 
 from __future__ import annotations
 
+import argparse
 import datetime as dt
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 import xarray as xr
@@ -36,7 +37,7 @@ def run_pipeline(
     run_timestamp = dt.datetime.now(dt.UTC).isoformat()
 
     zones = load_zones(config_path)
-    chl_ds = fetch_latest_chl()
+    chl_ds = fetch_latest_chl(run_date)
     observation_date = extract_dataset_date(chl_ds)
     results = compute_zone_results(chl_ds, zones, observation_date)
     ensure_zone_results_match(zones, results)
@@ -53,17 +54,16 @@ def run_pipeline(
                 email_sent = dispatch_anomaly_alert(
                     zone,
                     result,
-                    alert_date=execution_date,
                     observed_date=observation_date,
                     database_url=database_url,
                 )
             else:
                 consecutive_gap_days = (
-                    count_previous_gap_days(zone.name, execution_date, log_dir) + 1
+                    count_previous_gap_days(zone.name, observation_date, log_dir) + 1
                 )
                 email_sent = dispatch_gap_notification(
                     zone,
-                    alert_date=execution_date,
+                    observed_date=observation_date,
                     consecutive_gap_days=consecutive_gap_days,
                     database_url=database_url,
                 )
@@ -120,17 +120,41 @@ def ensure_zone_results_match(zones: list[Zone], results: list[ZoneResult]) -> N
         )
 
 
-def count_previous_gap_days(zone_name: str, run_date: dt.date, log_dir: Path) -> int:
+def count_previous_gap_days(zone_name: str, observed_date: dt.date, log_dir: Path) -> int:
     count = 0
-    current_date = run_date - dt.timedelta(days=1)
+    current_date = observed_date - dt.timedelta(days=1)
 
     while True:
-        entry = read_zone_entry(build_log_path(log_dir, current_date), zone_name)
+        entry = resolve_observed_zone_entry(log_dir, zone_name, current_date)
         if entry is None or entry.get("status") != "CLOUD_GAP":
             return count
 
         count += 1
         current_date -= dt.timedelta(days=1)
+
+
+def resolve_observed_zone_entry(
+    log_dir: Path,
+    zone_name: str,
+    observed_date: dt.date,
+) -> dict[str, Any] | None:
+    observed_date_iso = observed_date.isoformat()
+    fallback_entry: dict[str, Any] | None = None
+
+    # Scheduled runs usually write yesterday's observation into today's logfile.
+    for execution_date in (observed_date + dt.timedelta(days=1), observed_date):
+        entry = read_zone_entry(build_log_path(log_dir, execution_date), zone_name)
+        if entry is None:
+            continue
+
+        entry_observed_date = entry.get("observed_date")
+        if entry_observed_date == observed_date_iso:
+            return entry
+
+        if entry_observed_date is None and fallback_entry is None:
+            fallback_entry = entry
+
+    return fallback_entry
 
 
 def read_zone_entry(log_path: Path, zone_name: str) -> dict[str, Any] | None:
@@ -195,9 +219,51 @@ def emit_log_entry(entry: dict[str, Any], log_path: Path) -> None:
         handle.write(f"{line}\n")
 
 
-def main() -> int:
+def _parse_date(value: str) -> dt.date:
     try:
-        return run_pipeline()
+        return dt.date.fromisoformat(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            f"Invalid date {value!r}. Expected YYYY-MM-DD."
+        ) from exc
+
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run the BlueWatch daily pipeline.")
+    parser.add_argument(
+        "--date",
+        type=_parse_date,
+        help="Historical run date to fetch and process (YYYY-MM-DD).",
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=CONFIG_PATH,
+        help="Path to a zones.yaml config file.",
+    )
+    parser.add_argument(
+        "--log-dir",
+        type=Path,
+        default=LOG_DIR,
+        help="Directory for pipeline_YYYY-MM-DD.jsonl output.",
+    )
+    parser.add_argument(
+        "--database-url",
+        help="Optional DATABASE_URL override for alert deduplication storage.",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = parse_args(argv)
+
+    try:
+        return run_pipeline(
+            run_date=args.date,
+            config_path=args.config,
+            log_dir=args.log_dir,
+            database_url=args.database_url,
+        )
     except Exception as exc:
         print(f"ERROR: pipeline failed: {exc}", file=sys.stderr)
         return 1

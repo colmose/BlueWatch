@@ -1,0 +1,9 @@
+zones:
+  - name: Tiny Fixture Bay
+    description: Synthetic invalid zone smaller than the minimum area threshold.
+    alert_email: fixture-alerts@example.com
+    threshold_multiplier: 3.0
+    polygon:
+      type: Polygon
+      coordinates:
+        - [[-10.0, 53.0], [-9.995, 53.0], [-9.995, 53.005], [-10.0, 53.005], [-10.0, 53.0]]

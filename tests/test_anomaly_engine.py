@@ -40,6 +40,27 @@ def _make_chl_dataset(
     )
 
 
+def _make_chl_dataset_with_long_names(
+    chl_values,
+    lats=(53.0, 53.1, 53.2),
+    lons=(-10.0, -9.9, -9.8),
+    date: str = "2024-04-01",
+) -> xr.Dataset:
+    return xr.Dataset(
+        {
+            "CHL": (
+                ["time", "latitude", "longitude"],
+                np.array(chl_values, dtype=np.float32),
+            )
+        },
+        coords={
+            "time": np.array([date], dtype="datetime64[ns]"),
+            "latitude": np.array(lats),
+            "longitude": np.array(lons),
+        },
+    )
+
+
 def _write_climatology(tmp_path: Path, chl_mean_values, lats, lons, n_weeks=52) -> Path:
     """Write a synthetic climatology NetCDF and return its path."""
     weeks = np.arange(1, n_weeks + 1)
@@ -51,6 +72,32 @@ def _write_climatology(tmp_path: Path, chl_mean_values, lats, lons, n_weeks=52) 
         clim_data,
         dims=["week", "lat", "lon"],
         coords={"week": weeks, "lat": np.array(lats), "lon": np.array(lons)},
+        name="CHL_mean",
+    )
+    path = tmp_path / "wci_chl_climatology_wk.nc"
+    da.to_dataset(name="CHL_mean").to_netcdf(path)
+    return path
+
+
+def _write_climatology_with_long_names(
+    tmp_path: Path,
+    chl_mean_values,
+    lats,
+    lons,
+    n_weeks=52,
+) -> Path:
+    weeks = np.arange(1, n_weeks + 1)
+    clim_data = np.zeros((n_weeks, len(lats), len(lons)), dtype=np.float32)
+    clim_data[:] = np.array(chl_mean_values, dtype=np.float32)
+
+    da = xr.DataArray(
+        clim_data,
+        dims=["week", "latitude", "longitude"],
+        coords={
+            "week": weeks,
+            "latitude": np.array(lats),
+            "longitude": np.array(lons),
+        },
         name="CHL_mean",
     )
     path = tmp_path / "wci_chl_climatology_wk.nc"
@@ -230,6 +277,36 @@ def test_data_available_when_sufficient_valid_pixels(tmp_path):
     assert r.climatology_mean_chl == pytest.approx(2.0, rel=0.01)
     assert r.valid_pixel_count > 0
     assert r.total_pixel_count > 0
+
+
+def test_data_available_with_latitude_longitude_coords(tmp_path):
+    lats = (53.0, 53.1, 53.2)
+    lons = (-10.0, -9.9, -9.8)
+
+    chl_ds = _make_chl_dataset_with_long_names(
+        chl_values=[np.full((3, 3), 6.0, dtype=np.float32)],
+        lats=lats,
+        lons=lons,
+    )
+    clim_path = _write_climatology_with_long_names(
+        tmp_path,
+        np.full((3, 3), 2.0, dtype=np.float32),
+        lats,
+        lons,
+    )
+    mask_path = _write_empty_mask(tmp_path)
+    zone = _make_zone()
+
+    results = compute_zone_results(
+        chl_ds,
+        [zone],
+        datetime.date(2024, 4, 1),
+        clim_path=clim_path,
+        mask_path=mask_path,
+    )
+
+    assert results[0].status == "DATA_AVAILABLE"
+    assert results[0].anomaly_ratio == pytest.approx(3.0, rel=0.01)
 
 
 def test_zone_result_has_required_fields(tmp_path):

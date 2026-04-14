@@ -19,13 +19,23 @@ Run once offline before starting the daily pipeline:
 # (e.g., late December / early January). Compare false-positive rates against the
 # ISO-week baseline over the same 14-day pilot window before switching.
 
-import os
 import sys
 from pathlib import Path
 
-import copernicusmarine
-import numpy as np
-import xarray as xr
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+import copernicusmarine  # noqa: E402
+import numpy as np  # noqa: E402
+import xarray as xr  # noqa: E402
+
+from bluewatch.cmems import (  # noqa: E402
+    build_valid_chl_mask,
+    is_missing_quality_variable_error,
+    variable_request_candidates,
+)
+from bluewatch.env import get_env  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -43,7 +53,7 @@ START_DATE = "2016-01-01"
 END_DATE = "2024-12-31"
 
 OUTPUT_PATH = (
-    Path(__file__).parent.parent / "data" / "climatology" / "wci_chl_climatology_wk.nc"
+    REPO_ROOT / "data" / "climatology" / "wci_chl_climatology_wk.nc"
 )
 
 DEFAULT_N_WEEKS = 52
@@ -57,7 +67,7 @@ MAX_ISO_WEEK = 53
 
 def apply_quality_mask(ds: xr.Dataset) -> xr.DataArray:
     """Return CHL DataArray with non-flag-1 pixels masked to NaN."""
-    return ds["CHL"].where(ds["CHL_flags"] == 1)
+    return ds["CHL"].where(build_valid_chl_mask(ds))
 
 
 def compute_weekly_climatology(
@@ -101,8 +111,8 @@ def compute_weekly_climatology(
 
 
 def main() -> None:
-    username = os.environ.get("CMEMS_USERNAME")
-    password = os.environ.get("CMEMS_PASSWORD")
+    username = get_env("CMEMS_USERNAME")
+    password = get_env("CMEMS_PASSWORD")
     if not username or not password:
         sys.exit(
             "ERROR: CMEMS_USERNAME and CMEMS_PASSWORD environment variables must be set.\n"
@@ -115,18 +125,35 @@ def main() -> None:
     print(f"  Bounding box:   lon [{MIN_LON}, {MAX_LON}], lat [{MIN_LAT}, {MAX_LAT}]")
     print(f"  Time range:     {START_DATE} to {END_DATE}")
 
-    ds = copernicusmarine.open_dataset(
-        dataset_id=DATASET_ID,
-        variables=["CHL", "CHL_flags"],
-        minimum_longitude=MIN_LON,
-        maximum_longitude=MAX_LON,
-        minimum_latitude=MIN_LAT,
-        maximum_latitude=MAX_LAT,
-        start_datetime=START_DATE,
-        end_datetime=END_DATE,
-        username=username,
-        password=password,
-    )
+    ds: xr.Dataset | None = None
+    compatibility_errors: list[str] = []
+    for variables in variable_request_candidates():
+        try:
+            ds = copernicusmarine.open_dataset(
+                dataset_id=DATASET_ID,
+                variables=list(variables),
+                minimum_longitude=MIN_LON,
+                maximum_longitude=MAX_LON,
+                minimum_latitude=MIN_LAT,
+                maximum_latitude=MAX_LAT,
+                start_datetime=START_DATE,
+                end_datetime=END_DATE,
+                username=username,
+                password=password,
+            )
+            break
+        except Exception as exc:
+            if is_missing_quality_variable_error(exc, variables[1]):
+                compatibility_errors.append(str(exc))
+                continue
+            raise
+
+    if ds is None:
+        compatibility_detail = "; ".join(compatibility_errors)
+        sys.exit(
+            "ERROR: CMEMS dataset does not expose a supported quality variable. "
+            f"{compatibility_detail}"
+        )
 
     print(f"Dataset opened.   Dimensions: {dict(ds.sizes)}")
     n_steps = ds.sizes["time"]

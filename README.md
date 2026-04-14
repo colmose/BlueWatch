@@ -44,6 +44,14 @@ RESEND_API_KEY=your_resend_api_key
 BLUEWATCH_FROM_EMAIL=alerts@yourdomain.com
 ```
 
+`run_pipeline.py` and `scripts/build_climatology.py` will read values from `.env`
+automatically when exported environment variables are missing. Exported variables still
+take precedence.
+
+If you want shell variables available to every child process, `source .env` alone is not
+enough in `zsh` unless the file contains `export ...` lines. Use `set -a; source .env; set +a`
+if you specifically want the shell to export them.
+
 ### Alert log backend
 
 BlueWatch keeps SQLite as the default alert deduplication backend. If `DATABASE_URL` is unset, the pipeline creates and uses `data/alert_log.db` locally on first run.
@@ -100,6 +108,16 @@ Polygons must be at least 1 km² (300m pixel resolution floor). The pipeline wil
 python run_pipeline.py
 ```
 
+Historical replay and local verification are supported via CLI flags:
+
+```bash
+python run_pipeline.py \
+  --date 2026-04-13 \
+  --config config/zones.yaml \
+  --log-dir logs \
+  --database-url sqlite:////absolute/path/to/alert_log.db
+```
+
 Logs are written to `logs/pipeline_YYYY-MM-DD.jsonl` (JSON lines, one entry per zone per run).
 
 ### Schedule (cron)
@@ -108,6 +126,26 @@ Logs are written to `logs/pipeline_YYYY-MM-DD.jsonl` (JSON lines, one entry per 
 # Run daily at 10:00 UTC (CMEMS NRT data typically available by 09:00 UTC)
 0 10 * * * /path/to/venv/bin/python /path/to/BlueWatch/run_pipeline.py >> /var/log/bluewatch.log 2>&1
 ```
+
+### Manual Live Verification
+
+Use this when you want to verify the real CMEMS and Resend path outside CI:
+
+```bash
+CMEMS_USERNAME=your_cmems_username \
+CMEMS_PASSWORD=your_cmems_password \
+RESEND_API_KEY=your_resend_api_key \
+BLUEWATCH_FROM_EMAIL=alerts@yourdomain.com \
+python run_pipeline.py --date 2026-04-13
+```
+
+Verification checklist:
+
+- Confirm `logs/pipeline_2026-04-13.jsonl` was created.
+- Inspect the JSON line for `status`, `anomaly_ratio`, `zone_avg_chl`, `climatology_mean_chl`, `valid_pixel_count`, and `email_sent`.
+- If the anomaly ratio meets the configured threshold, confirm one alert email arrives with the zone name, observed date, Chl-a values, and ratio in the body.
+- Re-run the same command for the same date and confirm no duplicate anomaly email is sent for the same zone.
+- For gap-notification verification, run three consecutive historical dates with cloud-limited coverage and confirm the third day sends a gap notification.
 
 ---
 

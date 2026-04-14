@@ -283,7 +283,6 @@ def test_dispatch_anomaly_alert_sends_when_threshold_met(
     assert dispatch_anomaly_alert(
         zone,
         result,
-        alert_date=date(2026, 4, 13),
         observed_date=date(2026, 4, 12),
         db_path=tmp_path / "alert_log.db",
     )
@@ -297,7 +296,6 @@ def test_dispatch_anomaly_alert_skips_below_threshold(tmp_path: Path) -> None:
     assert not dispatch_anomaly_alert(
         zone,
         result,
-        alert_date=date(2026, 4, 13),
         observed_date=date(2026, 4, 13),
         db_path=tmp_path / "alert_log.db",
     )
@@ -323,14 +321,12 @@ def test_dispatch_anomaly_alert_deduplicates_same_day(
     assert dispatch_anomaly_alert(
         zone,
         result,
-        alert_date=date(2026, 4, 13),
         observed_date=date(2026, 4, 13),
         db_path=db_path,
     )
     assert not dispatch_anomaly_alert(
         zone,
         result,
-        alert_date=date(2026, 4, 13),
         observed_date=date(2026, 4, 13),
         db_path=db_path,
     )
@@ -356,7 +352,6 @@ def test_dispatch_anomaly_alert_does_not_record_on_send_failure(
         dispatch_anomaly_alert(
             zone,
             result,
-            alert_date=date(2026, 4, 13),
             observed_date=date(2026, 4, 13),
             db_path=db_path,
         )
@@ -383,7 +378,7 @@ def test_dispatch_gap_notification_sends_at_threshold(
 
     assert dispatch_gap_notification(
         make_zone(),
-        alert_date=date(2026, 4, 13),
+        observed_date=date(2026, 4, 13),
         consecutive_gap_days=GAP_DAYS_THRESHOLD,
         db_path=tmp_path / "alert_log.db",
     )
@@ -393,7 +388,7 @@ def test_dispatch_gap_notification_sends_at_threshold(
 def test_dispatch_gap_notification_skips_below_threshold(tmp_path: Path) -> None:
     assert not dispatch_gap_notification(
         make_zone(),
-        alert_date=date(2026, 4, 13),
+        observed_date=date(2026, 4, 13),
         consecutive_gap_days=GAP_DAYS_THRESHOLD - 1,
         db_path=tmp_path / "alert_log.db",
     )
@@ -415,13 +410,13 @@ def test_dispatch_gap_notification_deduplicates_same_day(
 
     assert dispatch_gap_notification(
         make_zone(),
-        alert_date=date(2026, 4, 13),
+        observed_date=date(2026, 4, 13),
         consecutive_gap_days=GAP_DAYS_THRESHOLD,
         db_path=db_path,
     )
     assert not dispatch_gap_notification(
         make_zone(),
-        alert_date=date(2026, 4, 13),
+        observed_date=date(2026, 4, 13),
         consecutive_gap_days=GAP_DAYS_THRESHOLD,
         db_path=db_path,
     )
@@ -445,7 +440,7 @@ def test_dispatch_gap_notification_does_not_record_on_send_failure(
     with pytest.raises(RuntimeError, match="resend down"):
         dispatch_gap_notification(
             zone,
-            alert_date=date(2026, 4, 13),
+            observed_date=date(2026, 4, 13),
             consecutive_gap_days=GAP_DAYS_THRESHOLD,
             db_path=db_path,
         )
@@ -457,12 +452,10 @@ def test_format_anomaly_body_contains_required_fields() -> None:
     body = _format_anomaly_body(
         make_zone(),
         make_result(),
-        alert_date=date(2026, 4, 13),
         observed_date=date(2026, 4, 12),
     )
 
     assert "Outer Clew Bay" in body
-    assert "2026-04-13" in body
     assert "2026-04-12" in body
     assert "2.0000" in body
     assert "4.00" in body
@@ -471,7 +464,7 @@ def test_format_anomaly_body_contains_required_fields() -> None:
 def test_format_gap_body_contains_required_fields() -> None:
     body = _format_gap_body(
         make_zone(),
-        alert_date=date(2026, 4, 13),
+        observed_date=date(2026, 4, 13),
         consecutive_gap_days=3,
     )
 

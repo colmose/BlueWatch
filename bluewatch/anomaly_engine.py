@@ -128,10 +128,11 @@ def compute_zone_results(
     turbid_polygons = load_turbid_polygons(mask_path)
     turbid_union = shapely.unary_union(turbid_polygons)
 
-    chl = chl_ds["CHL"]
+    chl = _normalize_spatial_axes(chl_ds["CHL"])
     if "time" in chl.dims:
         chl = chl.isel(time=0)
 
+    clim_week = _normalize_spatial_axes(clim_week)
     lats = chl.lat.values
     lons = chl.lon.values
 
@@ -199,3 +200,33 @@ def compute_zone_results(
             )
 
     return results
+
+
+def _normalize_spatial_axes(data: xr.DataArray) -> xr.DataArray:
+    """Return a view of data with spatial axes normalized to lat/lon names."""
+    lat_name, lon_name = _resolve_spatial_axis_names(data)
+
+    normalized = data.transpose(..., lat_name, lon_name)
+    rename_map = {}
+    if lat_name != "lat":
+        rename_map[lat_name] = "lat"
+    if lon_name != "lon":
+        rename_map[lon_name] = "lon"
+
+    if rename_map:
+        normalized = normalized.rename(rename_map)
+
+    return normalized
+
+
+def _resolve_spatial_axis_names(data: xr.DataArray) -> tuple[str, str]:
+    for lat_name, lon_name in (("lat", "lon"), ("latitude", "longitude")):
+        if lat_name in data.coords and lon_name in data.coords:
+            return lat_name, lon_name
+        if lat_name in data.dims and lon_name in data.dims:
+            return lat_name, lon_name
+
+    raise RuntimeError(
+        "CHL data does not expose supported spatial coordinates. "
+        f"Found dims={tuple(data.dims)!r}, coords={tuple(data.coords)!r}"
+    )
