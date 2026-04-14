@@ -55,7 +55,7 @@ def test_run_pipeline_logs_to_stdout_and_file(
 ) -> None:
     zone = make_zone()
     monkeypatch.setattr(pipeline, "load_zones", lambda config_path: [zone])
-    monkeypatch.setattr(pipeline, "fetch_latest_chl", lambda: make_dataset())
+    monkeypatch.setattr(pipeline, "fetch_latest_chl", lambda run_date=None: make_dataset())
     monkeypatch.setattr(
         pipeline,
         "compute_zone_results",
@@ -83,6 +83,36 @@ def test_run_pipeline_logs_to_stdout_and_file(
     assert file_entry == entry
 
 
+def test_run_pipeline_passes_explicit_date_to_ingest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    zone = make_zone()
+    captured: dict[str, date | None] = {}
+
+    monkeypatch.setattr(pipeline, "load_zones", lambda config_path: [zone])
+
+    def fake_fetch_latest_chl(run_date: date | None) -> xr.Dataset:
+        captured["run_date"] = run_date
+        return make_dataset("2026-04-13")
+
+    monkeypatch.setattr(pipeline, "fetch_latest_chl", fake_fetch_latest_chl)
+    monkeypatch.setattr(
+        pipeline,
+        "compute_zone_results",
+        lambda ds, zones, run_date: [make_result()],
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "dispatch_anomaly_alert",
+        lambda zone, result, **kwargs: False,
+    )
+
+    pipeline.run_pipeline(run_date=date(2026, 4, 13), log_dir=tmp_path / "logs")
+
+    assert captured["run_date"] == date(2026, 4, 13)
+
+
 def test_run_pipeline_uses_previous_logs_for_gap_streak(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -99,7 +129,11 @@ def test_run_pipeline_uses_previous_logs_for_gap_streak(
         )
 
     monkeypatch.setattr(pipeline, "load_zones", lambda config_path: [zone])
-    monkeypatch.setattr(pipeline, "fetch_latest_chl", lambda: make_dataset("2026-04-13"))
+    monkeypatch.setattr(
+        pipeline,
+        "fetch_latest_chl",
+        lambda run_date=None: make_dataset("2026-04-13"),
+    )
     monkeypatch.setattr(
         pipeline,
         "compute_zone_results",
@@ -137,7 +171,7 @@ def test_run_pipeline_logs_error_then_reraises(
 ) -> None:
     zone = make_zone()
     monkeypatch.setattr(pipeline, "load_zones", lambda config_path: [zone])
-    monkeypatch.setattr(pipeline, "fetch_latest_chl", lambda: make_dataset())
+    monkeypatch.setattr(pipeline, "fetch_latest_chl", lambda run_date=None: make_dataset())
     monkeypatch.setattr(
         pipeline,
         "compute_zone_results",
@@ -163,9 +197,47 @@ def test_main_returns_one_on_unhandled_exception(
 ) -> None:
     monkeypatch.setattr(
         pipeline,
+        "parse_args",
+        lambda argv=None: type(
+            "Args",
+            (),
+            {
+                "date": None,
+                "config": Path("config/zones.yaml"),
+                "log_dir": Path("logs"),
+                "database_url": None,
+            },
+        )(),
+    )
+    monkeypatch.setattr(
+        pipeline,
         "run_pipeline",
-        lambda: (_ for _ in ()).throw(RuntimeError("boom")),
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
     )
 
     assert pipeline.main() == 1
     assert "boom" in capsys.readouterr().err
+
+
+def test_parse_args_accepts_cli_overrides(tmp_path: Path) -> None:
+    config_path = tmp_path / "zones.yaml"
+    log_dir = tmp_path / "logs"
+    database_url = "sqlite:////tmp/bluewatch-alerts.db"
+
+    args = pipeline.parse_args(
+        [
+            "--date",
+            "2026-04-13",
+            "--config",
+            str(config_path),
+            "--log-dir",
+            str(log_dir),
+            "--database-url",
+            database_url,
+        ]
+    )
+
+    assert args.date == date(2026, 4, 13)
+    assert args.config == config_path
+    assert args.log_dir == log_dir
+    assert args.database_url == database_url

@@ -1,0 +1,9 @@
+zones:
+  - name: Fixture Bay
+    description: Synthetic end-to-end test zone covering the 3x3 fixture grid.
+    alert_email: fixture-alerts@example.com
+    threshold_multiplier: 3.0
+    polygon:
+      type: Polygon
+      coordinates:
+        - [[-10.05, 52.95], [-9.75, 52.95], [-9.75, 53.25], [-10.05, 53.25], [-10.05, 52.95]]

@@ -1,0 +1,23 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "reason": "Synthetic masked centre pixel for CLI end-to-end verification."
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-9.95, 53.05],
+            [-9.85, 53.05],
+            [-9.85, 53.15],
+            [-9.95, 53.15],
+            [-9.95, 53.05]
+          ]
+        ]
+      }
+    }
+  ]
+}

@@ -3,11 +3,12 @@
 
 from __future__ import annotations
 
+import argparse
 import datetime as dt
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 import xarray as xr
@@ -36,7 +37,7 @@ def run_pipeline(
     run_timestamp = dt.datetime.now(dt.UTC).isoformat()
 
     zones = load_zones(config_path)
-    chl_ds = fetch_latest_chl()
+    chl_ds = fetch_latest_chl(run_date)
     observation_date = extract_dataset_date(chl_ds)
     results = compute_zone_results(chl_ds, zones, observation_date)
     ensure_zone_results_match(zones, results)
@@ -195,9 +196,51 @@ def emit_log_entry(entry: dict[str, Any], log_path: Path) -> None:
         handle.write(f"{line}\n")
 
 
-def main() -> int:
+def _parse_date(value: str) -> dt.date:
     try:
-        return run_pipeline()
+        return dt.date.fromisoformat(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            f"Invalid date {value!r}. Expected YYYY-MM-DD."
+        ) from exc
+
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run the BlueWatch daily pipeline.")
+    parser.add_argument(
+        "--date",
+        type=_parse_date,
+        help="Historical run date to fetch and process (YYYY-MM-DD).",
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=CONFIG_PATH,
+        help="Path to a zones.yaml config file.",
+    )
+    parser.add_argument(
+        "--log-dir",
+        type=Path,
+        default=LOG_DIR,
+        help="Directory for pipeline_YYYY-MM-DD.jsonl output.",
+    )
+    parser.add_argument(
+        "--database-url",
+        help="Optional DATABASE_URL override for alert deduplication storage.",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = parse_args(argv)
+
+    try:
+        return run_pipeline(
+            run_date=args.date,
+            config_path=args.config,
+            log_dir=args.log_dir,
+            database_url=args.database_url,
+        )
     except Exception as exc:
         print(f"ERROR: pipeline failed: {exc}", file=sys.stderr)
         return 1
