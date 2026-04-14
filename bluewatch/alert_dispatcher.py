@@ -9,6 +9,7 @@ import sqlite3
 from abc import ABC, abstractmethod
 from datetime import date
 from pathlib import Path
+from typing import Any
 from urllib import error, request
 from urllib.parse import unquote, urlparse
 
@@ -103,7 +104,7 @@ class SQLiteAlertLogStore(AlertLogStore):
         return cursor.rowcount == 1
 
 
-def _load_psycopg():
+def _load_psycopg() -> Any:
     try:
         return importlib.import_module("psycopg")
     except ImportError as exc:

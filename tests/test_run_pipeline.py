@@ -110,7 +110,13 @@ def test_run_pipeline_uses_previous_logs_for_gap_streak(
 
     captured: dict[str, int] = {}
 
-    def fake_gap_dispatch(zone, *, alert_date, consecutive_gap_days, **kwargs):
+    def fake_gap_dispatch(
+        zone: Zone,
+        *,
+        alert_date: date,
+        consecutive_gap_days: int,
+        **kwargs: object,
+    ) -> bool:
         captured["consecutive_gap_days"] = consecutive_gap_days
         return True
 

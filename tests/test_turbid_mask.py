@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import Any
 
 MASK_PATH = Path(__file__).parent.parent / "data" / "masks" / "wci_turbid_mask.geojson"
 EXPECTED_REGIONS = {
@@ -12,19 +13,19 @@ EXPECTED_REGIONS = {
 }
 
 
-def test_mask_file_exists_and_is_feature_collection():
+def test_mask_file_exists_and_is_feature_collection() -> None:
     assert MASK_PATH.exists(), "Expected static turbidity mask GeoJSON to exist"
 
-    payload = json.loads(MASK_PATH.read_text())
+    payload: dict[str, Any] = json.loads(MASK_PATH.read_text())
 
     assert payload["type"] == "FeatureCollection"
     assert isinstance(payload["features"], list)
     assert len(payload["features"]) == 4
 
 
-def test_mask_contains_required_named_polygons_with_closed_rings():
-    payload = json.loads(MASK_PATH.read_text())
-    observed_regions = set()
+def test_mask_contains_required_named_polygons_with_closed_rings() -> None:
+    payload: dict[str, Any] = json.loads(MASK_PATH.read_text())
+    observed_regions: set[str] = set()
 
     for feature in payload["features"]:
         assert feature["type"] == "Feature"

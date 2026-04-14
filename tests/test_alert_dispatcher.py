@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib import error
 
 import pytest
@@ -90,7 +90,10 @@ def test_initialize_alert_log_creates_database_and_schema(tmp_path: Path) -> Non
     assert "PRIMARY KEY(zone_name, alert_date, alert_type)" in table_sql[0]
 
 
-def test_get_alert_log_store_defaults_to_sqlite(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_get_alert_log_store_defaults_to_sqlite(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     db_path = tmp_path / "data" / "alert_log.db"
     monkeypatch.delenv("DATABASE_URL", raising=False)
 
@@ -127,12 +130,12 @@ def test_get_alert_log_store_rejects_unsupported_url_scheme() -> None:
 def test_get_alert_log_store_raises_helpful_error_when_psycopg_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_import_module(name: str):
+    def fake_import_module(name: str) -> Any:
         if name == "psycopg":
             raise ImportError("No module named 'psycopg'")
         return __import__(name)
 
-    monkeypatch.setattr(alert_dispatcher.importlib, "import_module", fake_import_module)
+    monkeypatch.setattr("bluewatch.alert_dispatcher.importlib.import_module", fake_import_module)
 
     with pytest.raises(ImportError, match="psycopg is required for postgres alert logs"):
         get_alert_log_store(database_url="postgres://bluewatch:secret@example.com/alerts")
@@ -223,19 +226,19 @@ def test_send_email_posts_to_resend(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeResponse:
         status = 202
 
-        def __enter__(self):
+        def __enter__(self) -> "FakeResponse":
             return self
 
-        def __exit__(self, exc_type, exc, tb):
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> Literal[False]:
             return False
 
-    def fake_urlopen(req):
+    def fake_urlopen(req: Any) -> FakeResponse:
         captured["url"] = req.full_url
         captured["headers"] = dict(req.header_items())
         captured["body"] = req.data.decode("utf-8")
         return FakeResponse()
 
-    monkeypatch.setattr(alert_dispatcher.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr("bluewatch.alert_dispatcher.request.urlopen", fake_urlopen)
     _send_email(
         api_key="re_test",
         to="ops@example.com",
@@ -252,10 +255,10 @@ def test_send_email_posts_to_resend(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_send_email_raises_runtime_error_on_network_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_urlopen(req):
+    def fake_urlopen(req: Any) -> None:
         raise error.URLError("network down")
 
-    monkeypatch.setattr(alert_dispatcher.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr("bluewatch.alert_dispatcher.request.urlopen", fake_urlopen)
 
     with pytest.raises(RuntimeError, match="Resend API failure"):
         _send_email(api_key="re_test", to="ops@example.com", subject="Alert", body="payload")

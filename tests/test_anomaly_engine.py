@@ -1,3 +1,4 @@
+# mypy: disable-error-code=no-untyped-def
 """Tests for bluewatch/anomaly_engine.py (T06)."""
 
 import datetime
