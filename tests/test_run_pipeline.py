@@ -11,6 +11,7 @@ import xarray as xr
 from shapely.geometry import box
 
 import run_pipeline as pipeline
+from bluewatch.alert_dispatcher import record_alert
 from bluewatch.anomaly_engine import ZoneResult
 from bluewatch.config import Zone
 
@@ -122,9 +123,20 @@ def test_run_pipeline_uses_previous_logs_for_gap_streak(
     log_dir = tmp_path / "logs"
     log_dir.mkdir(parents=True)
 
-    for gap_date in ("2026-04-11", "2026-04-12"):
-        (log_dir / f"pipeline_{gap_date}.jsonl").write_text(
-            json.dumps({"zone_name": zone.name, "status": "CLOUD_GAP"}) + "\n",
+    previous_gap_entries = (
+        ("2026-04-12", "2026-04-11"),
+        ("2026-04-13", "2026-04-12"),
+    )
+    for execution_date, observed_date in previous_gap_entries:
+        (log_dir / f"pipeline_{execution_date}.jsonl").write_text(
+            json.dumps(
+                {
+                    "zone_name": zone.name,
+                    "status": "CLOUD_GAP",
+                    "observed_date": observed_date,
+                }
+            )
+            + "\n",
             encoding="utf-8",
         )
 
@@ -147,10 +159,11 @@ def test_run_pipeline_uses_previous_logs_for_gap_streak(
     def fake_gap_dispatch(
         zone: Zone,
         *,
-        alert_date: date,
+        observed_date: date,
         consecutive_gap_days: int,
         **kwargs: object,
     ) -> bool:
+        captured["observed_date"] = observed_date.toordinal()
         captured["consecutive_gap_days"] = consecutive_gap_days
         return True
 
@@ -159,9 +172,76 @@ def test_run_pipeline_uses_previous_logs_for_gap_streak(
     pipeline.run_pipeline(run_date=date(2026, 4, 13), log_dir=log_dir)
 
     entry = json.loads(capsys.readouterr().out.strip())
+    assert captured["observed_date"] == date(2026, 4, 13).toordinal()
     assert captured["consecutive_gap_days"] == 3
     assert entry["consecutive_gap_days"] == 3
     assert entry["email_sent"] is True
+
+
+def test_resolve_observed_zone_entry_prefers_live_run_log(tmp_path: Path) -> None:
+    zone = make_zone()
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir(parents=True)
+
+    observed_date = date(2026, 4, 12)
+    replay_entry = {
+        "zone_name": zone.name,
+        "status": "CLOUD_GAP",
+        "observed_date": observed_date.isoformat(),
+        "run_date": observed_date.isoformat(),
+    }
+    live_entry = {
+        "zone_name": zone.name,
+        "status": "CLOUD_GAP",
+        "observed_date": observed_date.isoformat(),
+        "run_date": date(2026, 4, 13).isoformat(),
+    }
+
+    (log_dir / "pipeline_2026-04-12.jsonl").write_text(
+        json.dumps(replay_entry) + "\n",
+        encoding="utf-8",
+    )
+    (log_dir / "pipeline_2026-04-13.jsonl").write_text(
+        json.dumps(live_entry) + "\n",
+        encoding="utf-8",
+    )
+
+    resolved = pipeline.resolve_observed_zone_entry(log_dir, zone.name, observed_date)
+
+    assert resolved == live_entry
+
+
+def test_run_pipeline_uses_observed_date_for_replay_dedup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    zone = make_zone()
+    database_url = f"sqlite:///{tmp_path / 'alert_log.db'}"
+
+    monkeypatch.setattr(pipeline, "load_zones", lambda config_path: [zone])
+    monkeypatch.setattr(
+        pipeline,
+        "fetch_latest_chl",
+        lambda run_date=None: make_dataset("2026-04-12"),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "compute_zone_results",
+        lambda ds, zones, run_date: [make_result()],
+    )
+
+    record_alert(zone.name, date(2026, 4, 12), "anomaly", database_url=database_url)
+
+    pipeline.run_pipeline(
+        run_date=date(2026, 4, 13),
+        log_dir=tmp_path / "logs",
+        database_url=database_url,
+    )
+
+    entry = json.loads(capsys.readouterr().out.strip())
+    assert entry["observed_date"] == "2026-04-12"
+    assert entry["email_sent"] is False
 
 
 def test_run_pipeline_logs_error_then_reraises(

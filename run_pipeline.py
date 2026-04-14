@@ -54,17 +54,16 @@ def run_pipeline(
                 email_sent = dispatch_anomaly_alert(
                     zone,
                     result,
-                    alert_date=execution_date,
                     observed_date=observation_date,
                     database_url=database_url,
                 )
             else:
                 consecutive_gap_days = (
-                    count_previous_gap_days(zone.name, execution_date, log_dir) + 1
+                    count_previous_gap_days(zone.name, observation_date, log_dir) + 1
                 )
                 email_sent = dispatch_gap_notification(
                     zone,
-                    alert_date=execution_date,
+                    observed_date=observation_date,
                     consecutive_gap_days=consecutive_gap_days,
                     database_url=database_url,
                 )
@@ -121,17 +120,41 @@ def ensure_zone_results_match(zones: list[Zone], results: list[ZoneResult]) -> N
         )
 
 
-def count_previous_gap_days(zone_name: str, run_date: dt.date, log_dir: Path) -> int:
+def count_previous_gap_days(zone_name: str, observed_date: dt.date, log_dir: Path) -> int:
     count = 0
-    current_date = run_date - dt.timedelta(days=1)
+    current_date = observed_date - dt.timedelta(days=1)
 
     while True:
-        entry = read_zone_entry(build_log_path(log_dir, current_date), zone_name)
+        entry = resolve_observed_zone_entry(log_dir, zone_name, current_date)
         if entry is None or entry.get("status") != "CLOUD_GAP":
             return count
 
         count += 1
         current_date -= dt.timedelta(days=1)
+
+
+def resolve_observed_zone_entry(
+    log_dir: Path,
+    zone_name: str,
+    observed_date: dt.date,
+) -> dict[str, Any] | None:
+    observed_date_iso = observed_date.isoformat()
+    fallback_entry: dict[str, Any] | None = None
+
+    # Scheduled runs usually write yesterday's observation into today's logfile.
+    for execution_date in (observed_date + dt.timedelta(days=1), observed_date):
+        entry = read_zone_entry(build_log_path(log_dir, execution_date), zone_name)
+        if entry is None:
+            continue
+
+        entry_observed_date = entry.get("observed_date")
+        if entry_observed_date == observed_date_iso:
+            return entry
+
+        if entry_observed_date is None and fallback_entry is None:
+            fallback_entry = entry
+
+    return fallback_entry
 
 
 def read_zone_entry(log_path: Path, zone_name: str) -> dict[str, Any] | None:

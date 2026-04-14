@@ -231,12 +231,11 @@ def dispatch_anomaly_alert(
     zone: Zone,
     result: ZoneResult,
     *,
-    alert_date: date,
     observed_date: date,
     db_path: Path = ALERT_LOG_PATH,
     database_url: str | None = None,
 ) -> bool:
-    """Send an anomaly alert when the zone breaches threshold and was not already sent."""
+    """Send an anomaly alert for the observed data day when threshold is breached."""
     if result.status != "DATA_AVAILABLE" or result.anomaly_ratio is None:
         return False
 
@@ -245,7 +244,7 @@ def dispatch_anomaly_alert(
 
     if has_alert_been_logged(
         zone.name,
-        alert_date,
+        observed_date,
         "anomaly",
         db_path=db_path,
         database_url=database_url,
@@ -256,12 +255,12 @@ def dispatch_anomaly_alert(
     _send_email(
         api_key=api_key,
         to=zone.alert_email,
-        subject=f"[BlueWatch] Chl-a anomaly alert - {zone.name} - {alert_date.isoformat()}",
-        body=_format_anomaly_body(zone, result, alert_date=alert_date, observed_date=observed_date),
+        subject=f"[BlueWatch] Chl-a anomaly alert - {zone.name} - {observed_date.isoformat()}",
+        body=_format_anomaly_body(zone, result, observed_date=observed_date),
     )
     record_alert(
         zone.name,
-        alert_date,
+        observed_date,
         "anomaly",
         db_path=db_path,
         database_url=database_url,
@@ -272,18 +271,18 @@ def dispatch_anomaly_alert(
 def dispatch_gap_notification(
     zone: Zone,
     *,
-    alert_date: date,
+    observed_date: date,
     consecutive_gap_days: int,
     db_path: Path = ALERT_LOG_PATH,
     database_url: str | None = None,
 ) -> bool:
-    """Send a gap notification when the zone reaches the configured gap streak."""
+    """Send a gap notification for the observed data day when the streak threshold is met."""
     if consecutive_gap_days < GAP_DAYS_THRESHOLD:
         return False
 
     if has_alert_been_logged(
         zone.name,
-        alert_date,
+        observed_date,
         "gap",
         db_path=db_path,
         database_url=database_url,
@@ -294,16 +293,16 @@ def dispatch_gap_notification(
     _send_email(
         api_key=api_key,
         to=zone.alert_email,
-        subject=f"[BlueWatch] Data gap notification - {zone.name} - {alert_date.isoformat()}",
+        subject=f"[BlueWatch] Data gap notification - {zone.name} - {observed_date.isoformat()}",
         body=_format_gap_body(
             zone,
-            alert_date=alert_date,
+            observed_date=observed_date,
             consecutive_gap_days=consecutive_gap_days,
         ),
     )
     record_alert(
         zone.name,
-        alert_date,
+        observed_date,
         "gap",
         db_path=db_path,
         database_url=database_url,
@@ -362,7 +361,6 @@ def _format_anomaly_body(
     zone: Zone,
     result: ZoneResult,
     *,
-    alert_date: date,
     observed_date: date,
 ) -> str:
     zone_avg = f"{result.zone_avg_chl:.4f}" if result.zone_avg_chl is not None else "N/A"
@@ -377,7 +375,6 @@ def _format_anomaly_body(
         "BlueWatch Anomaly Alert\n"
         "=======================\n\n"
         f"Zone:                {zone.name}\n"
-        f"Alert date:          {alert_date.isoformat()}\n"
         f"Observed data date:  {observed_date.isoformat()}\n"
         f"Zone avg Chl-a:      {zone_avg} mg/m3\n"
         f"Climatology mean:    {climatology_mean} mg/m3\n"
@@ -388,12 +385,12 @@ def _format_anomaly_body(
     )
 
 
-def _format_gap_body(zone: Zone, *, alert_date: date, consecutive_gap_days: int) -> str:
+def _format_gap_body(zone: Zone, *, observed_date: date, consecutive_gap_days: int) -> str:
     return (
         "BlueWatch Data Gap Notification\n"
         "===============================\n\n"
         f"Zone:              {zone.name}\n"
-        f"Alert date:        {alert_date.isoformat()}\n"
+        f"Observed data date:  {observed_date.isoformat()}\n"
         f"Consecutive gaps:  {consecutive_gap_days} days\n\n"
         f"{zone.name} has had insufficient valid satellite Chl-a coverage for "
         f"{consecutive_gap_days} consecutive days, so no anomaly assessment can be made.\n"
