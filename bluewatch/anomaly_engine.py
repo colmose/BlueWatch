@@ -35,6 +35,7 @@ class ZoneResult:
     status: Literal["DATA_AVAILABLE", "CLOUD_GAP"]
     anomaly_ratio: float | None      # None when CLOUD_GAP
     zone_avg_chl: float | None       # None when CLOUD_GAP (mg m-3)
+    climatology_mean_chl: float | None  # None when CLOUD_GAP (mg m-3)
     valid_pixel_count: int
     total_pixel_count: int
 
@@ -156,6 +157,7 @@ def compute_zone_results(
                     status="CLOUD_GAP",
                     anomaly_ratio=None,
                     zone_avg_chl=None,
+                    climatology_mean_chl=None,
                     valid_pixel_count=0,
                     total_pixel_count=0,
                 )
@@ -177,6 +179,7 @@ def compute_zone_results(
                     status="CLOUD_GAP",
                     anomaly_ratio=None,
                     zone_avg_chl=None,
+                    climatology_mean_chl=None,
                     valid_pixel_count=valid_count,
                     total_pixel_count=total_pixels,
                 )
@@ -189,6 +192,7 @@ def compute_zone_results(
                     status="DATA_AVAILABLE",
                     anomaly_ratio=float(np.mean(pixel_ratios)),
                     zone_avg_chl=float(np.mean(zone_chl[valid])),
+                    climatology_mean_chl=float(np.mean(zone_clim[valid])),
                     valid_pixel_count=valid_count,
                     total_pixel_count=total_pixels,
                 )

@@ -1,111 +1,323 @@
-"""Alert dispatcher: threshold check, deduplication, Resend API email send.
+"""Alert dispatch and deduplication helpers (FR-15 through FR-19)."""
 
-Implements T07 (SQLite alert log) and T08 (alert dispatch) per FR-15 through FR-19.
-"""
+from __future__ import annotations
 
-import datetime
+import importlib
+import json
 import os
 import sqlite3
-import sys
-from dataclasses import dataclass
+from abc import ABC, abstractmethod
+from datetime import date
 from pathlib import Path
-from typing import Literal
+from typing import Any
+from urllib import error, request
+from urllib.parse import unquote, urlparse
 
-import resend
-
+from bluewatch.anomaly_engine import ZoneResult
 from bluewatch.config import Zone
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
+ALERT_LOG_PATH = Path(__file__).parent.parent / "data" / "alert_log.db"
+DEFAULT_FROM_EMAIL = "BlueWatch Alerts <alerts@bluewatch.io>"
+RESEND_API_URL = "https://api.resend.com/emails"
+GAP_DAYS_THRESHOLD = 3
 
-DB_PATH = Path(__file__).parent.parent / "data" / "alert_log.db"
-GAP_DAYS_THRESHOLD = 3  # consecutive CLOUD_GAP days before gap notification (FR-04)
+SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS alert_log (
+    zone_name TEXT NOT NULL,
+    alert_date DATE NOT NULL,
+    alert_type TEXT NOT NULL,
+    PRIMARY KEY(zone_name, alert_date, alert_type)
+)
+"""
 
-AlertType = Literal["anomaly", "gap"]
+SQLITE_INSERT_SQL = """
+INSERT OR IGNORE INTO alert_log(zone_name, alert_date, alert_type)
+VALUES(?, ?, ?)
+"""
+
+POSTGRES_INSERT_SQL = """
+INSERT INTO alert_log(zone_name, alert_date, alert_type)
+VALUES(%s, %s, %s)
+ON CONFLICT DO NOTHING
+"""
+
+SELECT_EXISTS_SQL = """
+SELECT 1
+FROM alert_log
+WHERE zone_name = {placeholder} AND alert_date = {placeholder} AND alert_type = {placeholder}
+LIMIT 1
+"""
 
 
-# ---------------------------------------------------------------------------
-# Data transfer object
-# ---------------------------------------------------------------------------
+class AlertLogStore(ABC):
+    """Backend interface for alert deduplication storage."""
+
+    @abstractmethod
+    def initialize(self) -> Path | str:
+        """Create the backing store if needed and return its location."""
+
+    @abstractmethod
+    def has_alert_been_logged(self, zone_name: str, alert_date: date, alert_type: str) -> bool:
+        """Return whether an alert record already exists for the composite key."""
+
+    @abstractmethod
+    def record_alert(self, zone_name: str, alert_date: date, alert_type: str) -> bool:
+        """Insert a deduplication record and return whether it was newly created."""
 
 
-@dataclass
-class ZoneResult:
-    """Output of the anomaly engine for a single zone on a single day."""
+class SQLiteAlertLogStore(AlertLogStore):
+    """SQLite-backed alert log store."""
 
-    zone: Zone
-    date: datetime.date
-    status: Literal["DATA_AVAILABLE", "CLOUD_GAP"]
-    anomaly_ratio: float | None       # None when status == CLOUD_GAP
-    zone_avg_chl: float | None        # mg/m³; None when status == CLOUD_GAP
-    climatology_mean_chl: float | None  # mg/m³; None when status == CLOUD_GAP
-    valid_pixel_count: int
+    def __init__(self, db_path: Path) -> None:
+        self.db_path = db_path
 
+    def initialize(self) -> Path:
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
-# ---------------------------------------------------------------------------
-# SQLite alert log (T07)
-# ---------------------------------------------------------------------------
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(SCHEMA_SQL)
+            conn.commit()
 
+        return self.db_path
 
-def init_db(db_path: Path = DB_PATH) -> None:
-    """Create data directory and alert_log table if absent (T07)."""
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS alert_log (
-                zone_name  TEXT NOT NULL,
-                alert_date DATE NOT NULL,
-                alert_type TEXT NOT NULL,
-                PRIMARY KEY (zone_name, alert_date, alert_type)
+    def has_alert_been_logged(self, zone_name: str, alert_date: date, alert_type: str) -> bool:
+        self.initialize()
+
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute(
+                SELECT_EXISTS_SQL.format(placeholder="?"),
+                (zone_name, alert_date.isoformat(), alert_type),
+            ).fetchone()
+
+        return row is not None
+
+    def record_alert(self, zone_name: str, alert_date: date, alert_type: str) -> bool:
+        self.initialize()
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                SQLITE_INSERT_SQL,
+                (zone_name, alert_date.isoformat(), alert_type),
             )
-            """
-        )
+            conn.commit()
+
+        return cursor.rowcount == 1
 
 
-def already_sent(
-    zone_name: str,
-    alert_date: datetime.date,
-    alert_type: AlertType,
+def _load_psycopg() -> Any:
+    try:
+        return importlib.import_module("psycopg")
+    except ImportError as exc:
+        raise ImportError(
+            "psycopg is required for postgres alert logs. Install psycopg[binary] "
+            "or unset DATABASE_URL to keep using SQLite."
+        ) from exc
+
+
+class PostgresAlertLogStore(AlertLogStore):
+    """Postgres-backed alert log store."""
+
+    def __init__(self, database_url: str) -> None:
+        self.database_url = database_url
+        self._psycopg = _load_psycopg()
+
+    def initialize(self) -> str:
+        with self._psycopg.connect(self.database_url) as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(SCHEMA_SQL)
+            conn.commit()
+
+        return self.database_url
+
+    def has_alert_been_logged(self, zone_name: str, alert_date: date, alert_type: str) -> bool:
+        self.initialize()
+
+        with self._psycopg.connect(self.database_url) as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    SELECT_EXISTS_SQL.format(placeholder="%s"),
+                    (zone_name, alert_date.isoformat(), alert_type),
+                )
+                row = cursor.fetchone()
+
+        return row is not None
+
+    def record_alert(self, zone_name: str, alert_date: date, alert_type: str) -> bool:
+        self.initialize()
+
+        with self._psycopg.connect(self.database_url) as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    POSTGRES_INSERT_SQL,
+                    (zone_name, alert_date.isoformat(), alert_type),
+                )
+                inserted = int(cursor.rowcount) == 1
+            conn.commit()
+
+        return inserted
+
+
+def _resolve_sqlite_path(database_url: str) -> Path:
+    parsed = urlparse(database_url)
+    if parsed.netloc:
+        raise ValueError("Unsupported sqlite DATABASE_URL. Use sqlite:///absolute/path/to.db")
+
+    return Path(unquote(parsed.path))
+
+
+def get_alert_log_store(
+    database_url: str | None = None,
     *,
-    db_path: Path = DB_PATH,
+    db_path: Path = ALERT_LOG_PATH,
+) -> AlertLogStore:
+    """Resolve the configured alert log backend."""
+    resolved_url = database_url if database_url is not None else os.getenv("DATABASE_URL")
+
+    if not resolved_url:
+        return SQLiteAlertLogStore(db_path)
+
+    if resolved_url.startswith("sqlite:///"):
+        return SQLiteAlertLogStore(_resolve_sqlite_path(resolved_url))
+
+    if resolved_url.startswith(("postgres://", "postgresql://")):
+        return PostgresAlertLogStore(resolved_url)
+
+    raise ValueError(
+        "Unsupported DATABASE_URL scheme. Supported values are sqlite:///, "
+        "postgres://, and postgresql://."
+    )
+
+
+def initialize_alert_log(
+    db_path: Path = ALERT_LOG_PATH,
+    *,
+    database_url: str | None = None,
+) -> Path | str:
+    """Create the alert log backend if it does not already exist."""
+    return get_alert_log_store(database_url=database_url, db_path=db_path).initialize()
+
+
+def has_alert_been_logged(
+    zone_name: str,
+    alert_date: date,
+    alert_type: str,
+    *,
+    db_path: Path = ALERT_LOG_PATH,
+    database_url: str | None = None,
 ) -> bool:
-    """Return True if an alert was already logged for this zone/date/type (AC-06)."""
-    with sqlite3.connect(db_path) as conn:
-        row = conn.execute(
-            "SELECT 1 FROM alert_log WHERE zone_name = ? AND alert_date = ? AND alert_type = ?",
-            (zone_name, alert_date.isoformat(), alert_type),
-        ).fetchone()
-    return row is not None
+    """Return whether an alert record already exists for the composite key."""
+    return get_alert_log_store(
+        database_url=database_url,
+        db_path=db_path,
+    ).has_alert_been_logged(zone_name, alert_date, alert_type)
 
 
-def record_sent(
+def record_alert(
     zone_name: str,
-    alert_date: datetime.date,
-    alert_type: AlertType,
+    alert_date: date,
+    alert_type: str,
     *,
-    db_path: Path = DB_PATH,
-) -> None:
-    """Insert a deduplication record; silently no-ops if already present."""
-    with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            "INSERT OR IGNORE INTO alert_log (zone_name, alert_date, alert_type) VALUES (?, ?, ?)",
-            (zone_name, alert_date.isoformat(), alert_type),
-        )
+    db_path: Path = ALERT_LOG_PATH,
+    database_url: str | None = None,
+) -> bool:
+    """Insert a deduplication record. Returns False when the record already exists."""
+    return get_alert_log_store(
+        database_url=database_url,
+        db_path=db_path,
+    ).record_alert(zone_name, alert_date, alert_type)
 
 
-# ---------------------------------------------------------------------------
-# Resend API helpers
-# ---------------------------------------------------------------------------
+def dispatch_anomaly_alert(
+    zone: Zone,
+    result: ZoneResult,
+    *,
+    alert_date: date,
+    observed_date: date,
+    db_path: Path = ALERT_LOG_PATH,
+    database_url: str | None = None,
+) -> bool:
+    """Send an anomaly alert when the zone breaches threshold and was not already sent."""
+    if result.status != "DATA_AVAILABLE" or result.anomaly_ratio is None:
+        return False
+
+    if result.anomaly_ratio < zone.threshold_multiplier:
+        return False
+
+    if has_alert_been_logged(
+        zone.name,
+        alert_date,
+        "anomaly",
+        db_path=db_path,
+        database_url=database_url,
+    ):
+        return False
+
+    api_key = require_resend_api_key()
+    _send_email(
+        api_key=api_key,
+        to=zone.alert_email,
+        subject=f"[BlueWatch] Chl-a anomaly alert - {zone.name} - {alert_date.isoformat()}",
+        body=_format_anomaly_body(zone, result, alert_date=alert_date, observed_date=observed_date),
+    )
+    record_alert(
+        zone.name,
+        alert_date,
+        "anomaly",
+        db_path=db_path,
+        database_url=database_url,
+    )
+    return True
 
 
-def _require_resend_key() -> str:
-    """Return RESEND_API_KEY from env; sys.exit on missing (mirrors AC-09 pattern)."""
-    key = os.environ.get("RESEND_API_KEY")
-    if not key:
-        sys.exit("ERROR: RESEND_API_KEY environment variable must be set.")
-    return key
+def dispatch_gap_notification(
+    zone: Zone,
+    *,
+    alert_date: date,
+    consecutive_gap_days: int,
+    db_path: Path = ALERT_LOG_PATH,
+    database_url: str | None = None,
+) -> bool:
+    """Send a gap notification when the zone reaches the configured gap streak."""
+    if consecutive_gap_days < GAP_DAYS_THRESHOLD:
+        return False
+
+    if has_alert_been_logged(
+        zone.name,
+        alert_date,
+        "gap",
+        db_path=db_path,
+        database_url=database_url,
+    ):
+        return False
+
+    api_key = require_resend_api_key()
+    _send_email(
+        api_key=api_key,
+        to=zone.alert_email,
+        subject=f"[BlueWatch] Data gap notification - {zone.name} - {alert_date.isoformat()}",
+        body=_format_gap_body(
+            zone,
+            alert_date=alert_date,
+            consecutive_gap_days=consecutive_gap_days,
+        ),
+    )
+    record_alert(
+        zone.name,
+        alert_date,
+        "gap",
+        db_path=db_path,
+        database_url=database_url,
+    )
+    return True
+
+
+def require_resend_api_key() -> str:
+    """Return the configured Resend API key or exit loudly if absent."""
+    api_key = os.getenv("RESEND_API_KEY")
+    if not api_key:
+        raise SystemExit("ERROR: RESEND_API_KEY environment variable must be set.")
+
+    return api_key
 
 
 def _send_email(
@@ -114,135 +326,75 @@ def _send_email(
     to: str,
     subject: str,
     body: str,
+    from_email: str | None = None,
 ) -> None:
-    """Send a plain-text email via the Resend API.
+    payload: dict[str, object] = {
+        "from": from_email or os.getenv("BLUEWATCH_FROM_EMAIL", DEFAULT_FROM_EMAIL),
+        "to": [to],
+        "subject": subject,
+        "text": body,
+    }
+    req = request.Request(
+        RESEND_API_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
 
-    Raises RuntimeError on any Resend API failure (AC-10: do not silently drop alerts).
-    """
-    from_addr = os.environ.get("BLUEWATCH_FROM_EMAIL", "BlueWatch Alerts <alerts@bluewatch.io>")
-    resend.api_key = api_key
     try:
-        resend.Emails.send(
-            {
-                "from": from_addr,
-                "to": [to],
-                "subject": subject,
-                "text": body,
-            }
-        )
-    except Exception as exc:
-        raise RuntimeError(f"Resend API failure sending to {to!r}: {exc}") from exc
+        with request.urlopen(req) as response:
+            status = getattr(response, "status", 200)
+            if status >= 400:
+                raise RuntimeError(f"Resend API failure sending to {to!r}: HTTP {status}")
+    except error.HTTPError as exc:
+        details = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(
+            f"Resend API failure sending to {to!r}: HTTP {exc.code} {details}"
+        ) from exc
+    except error.URLError as exc:
+        raise RuntimeError(f"Resend API failure sending to {to!r}: {exc.reason}") from exc
 
 
-# ---------------------------------------------------------------------------
-# Public dispatch functions
-# ---------------------------------------------------------------------------
-
-
-def dispatch_anomaly_alert(
+def _format_anomaly_body(
+    zone: Zone,
     result: ZoneResult,
     *,
-    db_path: Path = DB_PATH,
-) -> bool:
-    """Send an anomaly alert email if threshold is met and not already sent today.
-
-    Returns True if an email was sent, False if the alert was skipped.
-    Raises RuntimeError on Resend API failure (AC-10).
-    """
-    if result.status != "DATA_AVAILABLE":
-        return False
-    if result.anomaly_ratio is None:
-        return False
-    if result.anomaly_ratio < result.zone.threshold_multiplier:
-        return False
-
-    init_db(db_path)
-    if already_sent(result.zone.name, result.date, "anomaly", db_path=db_path):
-        return False
-
-    api_key = _require_resend_key()
-    subject = f"[BlueWatch] Chl-a anomaly alert — {result.zone.name} — {result.date}"
-    _send_email(
-        api_key=api_key,
-        to=result.zone.alert_email,
-        subject=subject,
-        body=_format_anomaly_body(result),
-    )
-    record_sent(result.zone.name, result.date, "anomaly", db_path=db_path)
-    return True
-
-
-def dispatch_gap_notification(
-    zone: Zone,
-    date: datetime.date,
-    consecutive_gap_days: int,
-    *,
-    db_path: Path = DB_PATH,
-) -> bool:
-    """Send a gap notification if consecutive_gap_days >= threshold and not sent today.
-
-    Returns True if an email was sent, False if skipped.
-    Raises RuntimeError on Resend API failure (AC-10).
-    """
-    if consecutive_gap_days < GAP_DAYS_THRESHOLD:
-        return False
-
-    init_db(db_path)
-    if already_sent(zone.name, date, "gap", db_path=db_path):
-        return False
-
-    api_key = _require_resend_key()
-    subject = (
-        f"[BlueWatch] Data gap notification — {zone.name} — {date} "
-        f"({consecutive_gap_days} consecutive days)"
-    )
-    _send_email(
-        api_key=api_key,
-        to=zone.alert_email,
-        subject=subject,
-        body=_format_gap_body(zone, date, consecutive_gap_days),
-    )
-    record_sent(zone.name, date, "gap", db_path=db_path)
-    return True
-
-
-# ---------------------------------------------------------------------------
-# Email body formatters
-# ---------------------------------------------------------------------------
-
-
-def _format_anomaly_body(result: ZoneResult) -> str:
-    chl = f"{result.zone_avg_chl:.4f}" if result.zone_avg_chl is not None else "N/A"
-    clim = (
-        f"{result.climatology_mean_chl:.4f}" if result.climatology_mean_chl is not None else "N/A"
-    )
+    alert_date: date,
+    observed_date: date,
+) -> str:
+    zone_avg = f"{result.zone_avg_chl:.4f}" if result.zone_avg_chl is not None else "N/A"
     ratio = f"{result.anomaly_ratio:.2f}" if result.anomaly_ratio is not None else "N/A"
+    climatology_mean = (
+        f"{result.climatology_mean_chl:.4f}"
+        if result.climatology_mean_chl is not None
+        else "N/A"
+    )
+
     return (
-        f"BlueWatch Anomaly Alert\n"
-        f"=======================\n\n"
-        f"Zone:                {result.zone.name}\n"
-        f"Date:                {result.date}\n"
-        f"Zone avg Chl-a:      {chl} mg/m\u00b3\n"
-        f"Climatological mean: {clim} mg/m\u00b3\n"
+        "BlueWatch Anomaly Alert\n"
+        "=======================\n\n"
+        f"Zone:                {zone.name}\n"
+        f"Alert date:          {alert_date.isoformat()}\n"
+        f"Observed data date:  {observed_date.isoformat()}\n"
+        f"Zone avg Chl-a:      {zone_avg} mg/m3\n"
+        f"Climatology mean:    {climatology_mean} mg/m3\n"
         f"Anomaly ratio:       {ratio}x\n"
         f"Valid pixels:        {result.valid_pixel_count}\n\n"
-        f"The chlorophyll-a concentration in {result.zone.name} is "
-        f"{result.anomaly_ratio:.1f}x the seasonal climatological mean for this calendar week, "
-        f"which meets or exceeds the configured alert threshold of "
-        f"{result.zone.threshold_multiplier:.1f}x.\n\n"
-        f"This is an automated alert from the BlueWatch monitoring system."
+        f"The chlorophyll-a concentration in {zone.name} meets or exceeds the configured "
+        f"alert threshold of {zone.threshold_multiplier:.1f}x seasonal normal.\n"
     )
 
 
-def _format_gap_body(zone: Zone, date: datetime.date, consecutive_gap_days: int) -> str:
+def _format_gap_body(zone: Zone, *, alert_date: date, consecutive_gap_days: int) -> str:
     return (
-        f"BlueWatch Data Gap Notification\n"
-        f"================================\n\n"
-        f"Zone:               {zone.name}\n"
-        f"Date:               {date}\n"
-        f"Consecutive gaps:   {consecutive_gap_days} days\n\n"
-        f"{zone.name} has had insufficient valid satellite Chl-a data (cloud cover or "
-        f"sensor gap) for {consecutive_gap_days} consecutive days. No anomaly assessment "
-        f"can be made during this period.\n\n"
-        f"This is an automated gap notification from the BlueWatch monitoring system."
+        "BlueWatch Data Gap Notification\n"
+        "===============================\n\n"
+        f"Zone:              {zone.name}\n"
+        f"Alert date:        {alert_date.isoformat()}\n"
+        f"Consecutive gaps:  {consecutive_gap_days} days\n\n"
+        f"{zone.name} has had insufficient valid satellite Chl-a coverage for "
+        f"{consecutive_gap_days} consecutive days, so no anomaly assessment can be made.\n"
     )

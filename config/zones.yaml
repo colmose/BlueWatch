@@ -1,1 +1,34 @@
-# Zone definitions — populated in T10
+zones:
+  - name: Outer Clew Bay
+    description: >
+      Atlantic-facing shellfish monitoring zone spanning the outer Clew Bay
+      aquaculture cluster west of Westport, based on nearby licensed sites in
+      the west-coast aquaculture snapshot dated 2026-04-13.
+    alert_email: ops@bluewatch.io
+    threshold_multiplier: 3.0
+    polygon:
+      type: Polygon
+      coordinates:
+        - [
+            [-9.7400, 53.7850],
+            [-9.5400, 53.7850],
+            [-9.5400, 53.9000],
+            [-9.7400, 53.9000],
+            [-9.7400, 53.7850]
+          ]
+  - name: Outer Killary Harbour
+    description: >
+      Outer Killary Harbour shellfish monitoring zone covering the licensed
+      mussel and oyster sites clustered near the harbour mouth in Connemara.
+    alert_email: ops@bluewatch.io
+    threshold_multiplier: 3.0
+    polygon:
+      type: Polygon
+      coordinates:
+        - [
+            [-9.8600, 53.5950],
+            [-9.7300, 53.5950],
+            [-9.7300, 53.6230],
+            [-9.8600, 53.6230],
+            [-9.8600, 53.5950]
+          ]
