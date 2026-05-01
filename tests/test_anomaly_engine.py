@@ -31,11 +31,11 @@ def _make_chl_dataset(
 ) -> xr.Dataset:
     """Build a synthetic quality-filtered CHL Dataset (bad pixels already NaN)."""
     return xr.Dataset(
-        {"CHL": (["time", "lat", "lon"], np.array(chl_values, dtype=np.float32))},
+        {"CHL": (["time", "latitude", "longitude"], np.array(chl_values, dtype=np.float32))},
         coords={
             "time": np.array([date], dtype="datetime64[ns]"),
-            "lat": np.array(lats),
-            "lon": np.array(lons),
+            "latitude": np.array(lats),
+            "longitude": np.array(lons),
         },
     )
 
@@ -49,8 +49,8 @@ def _write_climatology(tmp_path: Path, chl_mean_values, lats, lons, n_weeks=52) 
 
     da = xr.DataArray(
         clim_data,
-        dims=["week", "lat", "lon"],
-        coords={"week": weeks, "lat": np.array(lats), "lon": np.array(lons)},
+        dims=["week", "latitude", "longitude"],
+        coords={"week": weeks, "latitude": np.array(lats), "longitude": np.array(lons)},
         name="CHL_mean",
     )
     path = tmp_path / "wci_chl_climatology_wk.nc"
@@ -99,18 +99,18 @@ def test_load_climatology_week_returns_correct_slice(tmp_path):
 
     da = xr.DataArray(
         clim_data,
-        dims=["week", "lat", "lon"],
-        coords={"week": np.arange(1, 53), "lat": lats, "lon": lons},
+        dims=["week", "latitude", "longitude"],
+        coords={"week": np.arange(1, 53), "latitude": lats, "longitude": lons},
         name="CHL_mean",
     )
     clim_path = tmp_path / "clim.nc"
     da.to_dataset(name="CHL_mean").to_netcdf(clim_path)
 
     slice_1 = load_climatology_week(1, clim_path)
-    assert float(slice_1.isel(lat=0, lon=0)) == pytest.approx(1.0)
+    assert float(slice_1.isel(latitude=0, longitude=0)) == pytest.approx(1.0)
 
     slice_10 = load_climatology_week(10, clim_path)
-    assert float(slice_10.isel(lat=0, lon=0)) == pytest.approx(5.0)
+    assert float(slice_10.isel(latitude=0, longitude=0)) == pytest.approx(5.0)
 
 
 def test_load_climatology_week_exits_if_file_missing(tmp_path):
@@ -124,8 +124,8 @@ def test_load_climatology_week_exits_if_week_absent(tmp_path):
     lons = [-10.0]
     da = xr.DataArray(
         np.ones((1, 1, 1), dtype=np.float32),
-        dims=["week", "lat", "lon"],
-        coords={"week": [5], "lat": lats, "lon": lons},
+        dims=["week", "latitude", "longitude"],
+        coords={"week": [5], "latitude": lats, "longitude": lons},
         name="CHL_mean",
     )
     clim_path = tmp_path / "clim.nc"
@@ -389,8 +389,8 @@ def test_correct_week_selected_from_run_date(tmp_path):
 
     da = xr.DataArray(
         clim_data,
-        dims=["week", "lat", "lon"],
-        coords={"week": np.arange(1, 53), "lat": np.array(lats), "lon": np.array(lons)},
+        dims=["week", "latitude", "longitude"],
+        coords={"week": np.arange(1, 53), "latitude": np.array(lats), "longitude": np.array(lons)},
         name="CHL_mean",
     )
     clim_path = tmp_path / "clim.nc"

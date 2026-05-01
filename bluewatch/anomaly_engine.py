@@ -132,11 +132,11 @@ def compute_zone_results(
     if "time" in chl.dims:
         chl = chl.isel(time=0)
 
-    lats = chl.lat.values
-    lons = chl.lon.values
+    lats = chl.latitude.values
+    lons = chl.longitude.values
 
     # Align climatology grid to the CHL grid (nearest-neighbour, no scipy required)
-    clim_aligned = clim_week.sel(lat=chl.lat, lon=chl.lon, method="nearest")
+    clim_aligned = clim_week.sel(latitude=chl.latitude, longitude=chl.longitude, method="nearest")
 
     # Turbidity exclusion mask: True = turbid pixel (excluded from zone averages)
     turbid_mask = build_polygon_mask(lats, lons, turbid_union)

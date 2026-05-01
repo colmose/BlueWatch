@@ -4,6 +4,10 @@
 from __future__ import annotations
 
 import datetime as dt
+
+from dotenv import load_dotenv
+
+load_dotenv()
 import json
 import sys
 from pathlib import Path

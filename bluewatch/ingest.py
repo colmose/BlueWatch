@@ -45,6 +45,12 @@ class CMEMSDownloadError(RuntimeError):
 
 def apply_quality_filter(ds: xr.Dataset) -> xr.Dataset:
     """Return a copy of ds with non-flag-1 CHL pixels masked to NaN."""
+    if "CHL_flags" not in ds:
+        sys.stderr.write(
+            "WARNING: CHL_flags not found in dataset — quality filtering skipped.\n"
+            f"         Available variables: {sorted(ds.data_vars)}\n"
+        )
+        return ds
     filtered = ds.copy()
     filtered["CHL"] = ds["CHL"].where(ds["CHL_flags"] == 1)
     return filtered
@@ -105,7 +111,7 @@ def _download_subset(username: str, password: str, date_str: str, out_file: Path
     try:
         copernicusmarine.subset(
             dataset_id=DATASET_ID,
-            variables=["CHL", "CHL_flags"],
+            variables=["CHL"],
             minimum_longitude=MIN_LON,
             maximum_longitude=MAX_LON,
             minimum_latitude=MIN_LAT,

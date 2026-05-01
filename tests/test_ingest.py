@@ -21,16 +21,16 @@ def make_dataset(
 ) -> xr.Dataset:
     return xr.Dataset(
         {
-            "CHL": (["time", "lat", "lon"], np.array(chl_values, dtype=np.float32)),
+            "CHL": (["time", "latitude", "longitude"], np.array(chl_values, dtype=np.float32)),
             "CHL_flags": (
-                ["time", "lat", "lon"],
+                ["time", "latitude", "longitude"],
                 np.array(flag_values, dtype=np.int8),
             ),
         },
         coords={
             "time": np.array([date], dtype="datetime64[ns]"),
-            "lat": np.array([53.0, 53.1]),
-            "lon": np.array([-10.0, -9.9]),
+            "latitude": np.array([53.0, 53.1]),
+            "longitude": np.array([-10.0, -9.9]),
         },
     )
 
@@ -53,7 +53,7 @@ def test_apply_quality_filter_retains_good_pixels() -> None:
 
     result = apply_quality_filter(dataset)
 
-    assert float(result["CHL"].isel(time=0, lat=0, lon=0)) == pytest.approx(1.0)
+    assert float(result["CHL"].isel(time=0, latitude=0, longitude=0)) == pytest.approx(1.0)
     assert not np.any(np.isnan(result["CHL"].values))
 
 
@@ -65,8 +65,8 @@ def test_apply_quality_filter_masks_bad_pixels() -> None:
 
     result = apply_quality_filter(dataset)
 
-    assert np.isnan(float(result["CHL"].isel(time=0, lat=0, lon=1)))
-    assert np.isnan(float(result["CHL"].isel(time=0, lat=1, lon=0)))
+    assert np.isnan(float(result["CHL"].isel(time=0, latitude=0, longitude=1)))
+    assert np.isnan(float(result["CHL"].isel(time=0, latitude=1, longitude=0)))
 
 
 def test_fetch_latest_chl_exits_on_missing_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -89,8 +89,8 @@ def test_fetch_latest_chl_returns_filtered_dataset(monkeypatch: pytest.MonkeyPat
 
     result = fetch_latest_chl(date=datetime.date(2024, 1, 15))
 
-    assert np.isnan(float(result["CHL"].isel(time=0, lat=0, lon=1)))
-    assert float(result["CHL"].isel(time=0, lat=1, lon=0)) == pytest.approx(3.0)
+    assert np.isnan(float(result["CHL"].isel(time=0, latitude=0, longitude=1)))
+    assert float(result["CHL"].isel(time=0, latitude=1, longitude=0)) == pytest.approx(3.0)
 
 
 def test_fetch_latest_chl_falls_back_one_extra_day(monkeypatch: pytest.MonkeyPatch) -> None:

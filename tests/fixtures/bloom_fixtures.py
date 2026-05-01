@@ -115,11 +115,11 @@ def build_climatology_fixture(
     )
     da = xr.DataArray(
         clim_data,
-        dims=["week", "lat", "lon"],
+        dims=["week", "latitude", "longitude"],
         coords={
             "week": np.arange(1, n_weeks + 1),
-            "lat": lats,
-            "lon": lons,
+            "latitude": lats,
+            "longitude": lons,
         },
         name="CHL_mean",
     )
@@ -168,11 +168,11 @@ def build_bloom_fixture(
                 chl_values[0, i, j] = bloom_chl
 
     return xr.Dataset(
-        {"CHL": (["time", "lat", "lon"], chl_values)},
+        {"CHL": (["time", "latitude", "longitude"], chl_values)},
         coords={
             "time": np.array([str(event.date)], dtype="datetime64[ns]"),
-            "lat": lats,
-            "lon": lons,
+            "latitude": lats,
+            "longitude": lons,
         },
     )
 
@@ -216,11 +216,11 @@ def build_synthetic_climatology(
     )
     da = xr.DataArray(
         clim_data,
-        dims=["week", "lat", "lon"],
+        dims=["week", "latitude", "longitude"],
         coords={
             "week": np.arange(1, n_weeks + 1),
-            "lat": lats,
-            "lon": lons,
+            "latitude": lats,
+            "longitude": lons,
         },
         name="CHL_mean",
     )

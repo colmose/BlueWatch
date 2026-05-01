@@ -53,10 +53,10 @@ def _make_dataset(
     lon_coord = np.array([-10.0, -9.9])
     return xr.Dataset(
         {
-            "CHL": (["time", "lat", "lon"], np.array(chl_values, dtype=np.float32)),
-            "CHL_flags": (["time", "lat", "lon"], np.array(flag_values, dtype=np.int8)),
+            "CHL": (["time", "latitude", "longitude"], np.array(chl_values, dtype=np.float32)),
+            "CHL_flags": (["time", "latitude", "longitude"], np.array(flag_values, dtype=np.int8)),
         },
-        coords={"time": time_coord, "lat": lat_coord, "lon": lon_coord},
+        coords={"time": time_coord, "latitude": lat_coord, "longitude": lon_coord},
     )
 
 
@@ -79,8 +79,8 @@ def test_good_flag_pixels_kept() -> None:
         flag_values=[[[1, 1], [1, 1]]],
     )
     masked = apply_quality_mask(ds)
-    assert float(masked.isel(time=0, lat=0, lon=0)) == pytest.approx(1.0)
-    assert not np.isnan(float(masked.isel(time=0, lat=1, lon=1)))
+    assert float(masked.isel(time=0, latitude=0, longitude=0)) == pytest.approx(1.0)
+    assert not np.isnan(float(masked.isel(time=0, latitude=1, longitude=1)))
 
 
 def test_bad_flag_pixels_become_nan() -> None:
@@ -90,10 +90,10 @@ def test_bad_flag_pixels_become_nan() -> None:
         flag_values=[[[1, 0], [2, 1]]],  # pixels (0,1) and (1,0) are bad
     )
     masked = apply_quality_mask(ds)
-    assert float(masked.isel(time=0, lat=0, lon=0)) == pytest.approx(1.0)
-    assert np.isnan(float(masked.isel(time=0, lat=0, lon=1)))
-    assert np.isnan(float(masked.isel(time=0, lat=1, lon=0)))
-    assert float(masked.isel(time=0, lat=1, lon=1)) == pytest.approx(4.0)
+    assert float(masked.isel(time=0, latitude=0, longitude=0)) == pytest.approx(1.0)
+    assert np.isnan(float(masked.isel(time=0, latitude=0, longitude=1)))
+    assert np.isnan(float(masked.isel(time=0, latitude=1, longitude=0)))
+    assert float(masked.isel(time=0, latitude=1, longitude=1)) == pytest.approx(4.0)
 
 
 def test_all_bad_flags_all_nan() -> None:
@@ -140,7 +140,7 @@ def test_weekly_mean_values_correct() -> None:
     )
     chl = apply_quality_mask(ds)
     clim = compute_weekly_climatology(chl)
-    week1_mean = float(clim.sel(week=1).isel(lat=0, lon=0))
+    week1_mean = float(clim.sel(week=1).isel(latitude=0, longitude=0))
     assert week1_mean == pytest.approx(3.0)
 
 
@@ -156,7 +156,7 @@ def test_bad_pixels_excluded_from_mean() -> None:
     )
     chl = apply_quality_mask(ds)
     clim = compute_weekly_climatology(chl)
-    week1_mean = float(clim.sel(week=1).isel(lat=0, lon=0))
+    week1_mean = float(clim.sel(week=1).isel(latitude=0, longitude=0))
     assert week1_mean == pytest.approx(2.0)
 
 
@@ -169,9 +169,9 @@ def test_weeks_with_no_data_are_nan() -> None:
     )
     chl = apply_quality_mask(ds)
     clim = compute_weekly_climatology(chl)
-    assert float(clim.sel(week=10).isel(lat=0, lon=0)) == pytest.approx(5.0)
+    assert float(clim.sel(week=10).isel(latitude=0, longitude=0)) == pytest.approx(5.0)
     # Week 1 had no data → NaN
-    assert np.isnan(float(clim.sel(week=1).isel(lat=0, lon=0)))
+    assert np.isnan(float(clim.sel(week=1).isel(latitude=0, longitude=0)))
 
 
 # ---------------------------------------------------------------------------
@@ -201,8 +201,8 @@ def test_week_53_preserved_as_separate_slice() -> None:
     clim = compute_weekly_climatology(chl)
 
     assert clim.sizes["week"] == 53, "Output must expand to include week 53 when present"
-    week52_mean = float(clim.sel(week=52).isel(lat=0, lon=0))
-    week53_mean = float(clim.sel(week=53).isel(lat=0, lon=0))
+    week52_mean = float(clim.sel(week=52).isel(latitude=0, longitude=0))
+    week53_mean = float(clim.sel(week=53).isel(latitude=0, longitude=0))
     assert week52_mean == pytest.approx(2.0)
     assert week53_mean == pytest.approx(4.0)
 
@@ -295,8 +295,8 @@ def test_main_writes_week_53_slice_when_present(
 
     out_ds = xr.open_dataset(out_path)
     assert out_ds.sizes["week"] == 53
-    assert float(out_ds["CHL_mean"].sel(week=52).isel(lat=0, lon=0)) == pytest.approx(2.0)
-    assert float(out_ds["CHL_mean"].sel(week=53).isel(lat=0, lon=0)) == pytest.approx(4.0)
+    assert float(out_ds["CHL_mean"].sel(week=52).isel(latitude=0, longitude=0)) == pytest.approx(2.0)
+    assert float(out_ds["CHL_mean"].sel(week=53).isel(latitude=0, longitude=0)) == pytest.approx(4.0)
 
 
 def test_main_exits_on_empty_dataset(

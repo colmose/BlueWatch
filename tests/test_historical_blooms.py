@@ -166,8 +166,8 @@ def test_build_bloom_fixture_has_correct_structure(tmp_path):
 
     ds = build_bloom_fixture(event, zone.polygon)
     assert "CHL" in ds.data_vars
-    assert "lat" in ds.coords
-    assert "lon" in ds.coords
+    assert "latitude" in ds.coords
+    assert "longitude" in ds.coords
     assert "time" in ds.coords
 
 
@@ -183,8 +183,8 @@ def test_build_bloom_fixture_zone_pixels_at_bloom_chl(tmp_path):
     background = 1.0
     ds = build_bloom_fixture(event, zone.polygon, background_chl=background)
     chl = ds["CHL"].isel(time=0)
-    lats = chl.lat.values
-    lons = chl.lon.values
+    lats = chl.latitude.values
+    lons = chl.longitude.values
 
     expected_bloom = background * event.synthetic_anomaly_ratio
     from shapely.geometry import Point
@@ -503,8 +503,8 @@ def test_build_synthetic_climatology_covers_zone(tmp_path):
     assert "CHL_mean" in ds.data_vars
     assert "week" in ds.dims
 
-    lats = ds.lat.values
-    lons = ds.lon.values
+    lats = ds.latitude.values
+    lons = ds.longitude.values
     assert len(lats) >= 3, f"Expected ≥3 lat values, got {len(lats)}"
     assert len(lons) >= 3, f"Expected ≥3 lon values, got {len(lons)}"
 
